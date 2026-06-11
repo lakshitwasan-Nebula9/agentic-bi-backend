@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.routers import auth, connectors, health
+from app.routers import auth, connectors, datasets, health
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -11,6 +11,7 @@ app = FastAPI(
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connectors.router, prefix=settings.API_V1_PREFIX)
+app.include_router(datasets.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")
