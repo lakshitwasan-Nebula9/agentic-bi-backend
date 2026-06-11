@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.crud import user as user_crud
 from app.models.user import User, UserRole
 from app.services.auth_service import decode_access_token
 
@@ -31,7 +32,7 @@ def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    user = db.get(User, uuid.UUID(user_id))
+    user = user_crud.get_user_by_id(db, uuid.UUID(user_id))
     if user is None or not user.is_active:
         raise credentials_exception
 
