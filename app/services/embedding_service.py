@@ -1,6 +1,5 @@
 import uuid
 from functools import lru_cache
-from typing import Literal
 
 from sentence_transformers import SentenceTransformer
 from sqlalchemy.orm import Session
@@ -11,17 +10,11 @@ from app.models.embeddings import EmbeddingRecord
 
 @lru_cache(maxsize=1)
 def _load_model() -> SentenceTransformer:
-    return SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True)
+    return SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
-def generate_embedding(text: str, mode: Literal["document", "query"] = "document") -> list[float]:
-    """Generate an embedding vector for the given text.
-
-    nomic-embed-text-v1 requires task-type prefixes for best quality.
-    """
-    prefix = "search_document: " if mode == "document" else "search_query: "
-    model = _load_model()
-    return model.encode(prefix + text).tolist()
+def generate_embedding(text: str) -> list[float]:
+    return _load_model().encode(text).tolist()
 
 
 def upsert_embedding(
@@ -31,8 +24,7 @@ def upsert_embedding(
     entity_id: str,
     content: str,
 ) -> EmbeddingRecord:
-    """Store or update an embedding record for a given entity."""
-    embedding = generate_embedding(content, mode="document")
+    embedding = generate_embedding(content)
 
     record = (
         db.query(EmbeddingRecord)
@@ -69,8 +61,7 @@ def search_similar(
     entity_type: str | None = None,
     top_k: int = 5,
 ) -> list[EmbeddingRecord]:
-    """Return top-k records closest to the query vector (cosine distance)."""
-    query_embedding = generate_embedding(query, mode="query")
+    query_embedding = generate_embedding(query)
 
     q = db.query(EmbeddingRecord).filter(EmbeddingRecord.tenant_id == tenant_id)
     if entity_type:

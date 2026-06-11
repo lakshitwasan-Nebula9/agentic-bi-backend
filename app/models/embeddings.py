@@ -16,7 +16,7 @@ class EmbeddingRecord(Base):
     entity_type = Column(String(50), nullable=False, index=True)
     entity_id = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(768))
+    embedding = Column(Vector(384))
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

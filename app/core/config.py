@@ -17,8 +17,10 @@ class Settings(BaseSettings):
 
     CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
 
-    EMBEDDING_MODEL: str = "nomic-ai/nomic-embed-text-v1"
-    EMBEDDING_DIMENSIONS: int = 768
+    GEMINI_API_KEY: str | None = None
+    GEMINI_LLM_MODEL: str = "gemini-1.5-flash"
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSIONS: int = 384
 
     class Config:
         env_file = ".env"
