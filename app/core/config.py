@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/agentic_bi"
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
