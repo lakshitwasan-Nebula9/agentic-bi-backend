@@ -21,9 +21,7 @@ def test_upsert_creates_new_record():
         from app.services.embedding_service import upsert_embedding
 
         db = MagicMock()
-        db.query.return_value.filter.return_value.filter.return_value.filter.return_value.first.return_value = (
-            None
-        )
+        db.query.return_value.filter.return_value.first.return_value = None
         upsert_embedding(db, uuid.uuid4(), "business_term", "churn", "Customer churn rate")
         db.add.assert_called_once()
         db.commit.assert_called_once()
@@ -36,9 +34,7 @@ def test_upsert_updates_existing_record():
         from app.services.embedding_service import upsert_embedding
 
         db = MagicMock()
-        db.query.return_value.filter.return_value.filter.return_value.filter.return_value.first.return_value = (
-            existing
-        )
+        db.query.return_value.filter.return_value.first.return_value = existing
         upsert_embedding(db, uuid.uuid4(), "business_term", "churn", "Updated definition")
         assert existing.content == "Updated definition"
         assert existing.embedding == fake_embedding
