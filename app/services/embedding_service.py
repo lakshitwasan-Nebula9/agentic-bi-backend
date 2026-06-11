@@ -67,8 +67,4 @@ def search_similar(
     if entity_type:
         q = q.filter(EmbeddingRecord.entity_type == entity_type)
 
-    return (
-        q.order_by(EmbeddingRecord.embedding.cosine_distance(query_embedding))
-        .limit(top_k)
-        .all()
-    )
+    return q.order_by(EmbeddingRecord.embedding.cosine_distance(query_embedding)).limit(top_k).all()

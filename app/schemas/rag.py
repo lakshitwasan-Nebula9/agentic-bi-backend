@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 class EmbedRequest(BaseModel):
     tenant_id: uuid.UUID
-    entity_type: str = Field(..., examples=["kpi_definition", "business_term", "schema_description"])
+    entity_type: str = Field(
+        ..., examples=["kpi_definition", "business_term", "schema_description"]
+    )
     entity_id: str
     content: str
 

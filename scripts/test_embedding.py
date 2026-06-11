@@ -1,15 +1,18 @@
-"""Quick smoke test for the Gemini embedding API. Run with:
+"""Quick smoke test for the embedding service. Run with:
     python scripts/test_embedding.py
 """
-import sys
+
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dotenv import load_dotenv
+# load_dotenv must run before app imports so settings picks up .env values
+from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv()
 
-from app.services.embedding_service import generate_embedding
+from app.services.embedding_service import generate_embedding  # noqa: E402
 
 print("Calling embed API...")
 vec = generate_embedding("Customer churn rate")

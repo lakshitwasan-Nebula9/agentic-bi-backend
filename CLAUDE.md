@@ -61,7 +61,7 @@ Each agent is a containerized Python worker that subscribes to specific Redis ev
 |---|---|
 | API | FastAPI (Python) |
 | Agent workers | Python + LangChain or custom orchestration |
-| LLM | Anthropic Claude or OpenAI GPT-4o |
+| LLM | Google Gemini |
 | Vector store | pgvector (Postgres extension) |
 | Data transform | dbt Core |
 | Message broker | Redis Streams |
