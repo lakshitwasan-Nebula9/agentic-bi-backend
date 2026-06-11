@@ -20,7 +20,11 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    hashed_password: Mapped[str] = mapped_column(String, nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    auth_provider: Mapped[str] = mapped_column(String, default="local", nullable=False)
+    external_subject: Mapped[str | None] = mapped_column(
+        String, unique=True, nullable=True, index=True
+    )
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole, name="user_role", values_callable=lambda enum_cls: [e.value for e in enum_cls]
