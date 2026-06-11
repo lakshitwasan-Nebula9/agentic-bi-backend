@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_ALLOWED_DOMAIN: str | None = None
 
-    CONNECTOR_ENCRYPTION_KEY: str = "change-me-32-byte-fernet-key-base64=="
+    CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
 
     class Config:
         env_file = ".env"
