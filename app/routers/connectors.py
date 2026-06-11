@@ -1,0 +1,75 @@
+import uuid
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.security import get_current_user, require_role
+from app.models.user import User, UserRole
+from app.schemas.connector import (
+    ConnectionTestResult,
+    ConnectorCreate,
+    ConnectorResponse,
+    ConnectorUpdate,
+)
+from app.services import connector_service
+
+router = APIRouter(prefix="/connectors", tags=["connectors"])
+
+MANAGE_ROLES = (UserRole.ANALYST, UserRole.MANAGER, UserRole.EXECUTIVE)
+
+
+@router.post("", response_model=ConnectorResponse, status_code=status.HTTP_201_CREATED)
+def create_connector(
+    payload: ConnectorCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    return connector_service.create_connector(db, payload, created_by=current_user.id)
+
+
+@router.get("", response_model=list[ConnectorResponse])
+def list_connectors(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return connector_service.list_connectors(db)
+
+
+@router.get("/{connector_id}", response_model=ConnectorResponse)
+def get_connector(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return connector_service.get_connector_or_404(db, connector_id)
+
+
+@router.patch("/{connector_id}", response_model=ConnectorResponse)
+def update_connector(
+    connector_id: uuid.UUID,
+    payload: ConnectorUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    return connector_service.update_connector(db, connector_id, payload)
+
+
+@router.delete("/{connector_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_connector(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    connector_service.delete_connector(db, connector_id)
+
+
+@router.post("/{connector_id}/test", response_model=ConnectionTestResult)
+def test_connector_connection(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    connector = connector_service.get_connector_or_404(db, connector_id)
+    success, message = connector_service.test_connection(connector)
+    return ConnectionTestResult(success=success, message=message)
