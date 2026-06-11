@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
 
+    EMBEDDING_MODEL: str = "nomic-ai/nomic-embed-text-v1"
+    EMBEDDING_DIMENSIONS: int = 768
+
     class Config:
         env_file = ".env"
 
