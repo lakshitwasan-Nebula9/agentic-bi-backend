@@ -26,6 +26,10 @@ def get_user_by_external_subject(
     )
 
 
+def list_users(db: Session) -> list[User]:
+    return db.query(User).order_by(User.created_at).all()
+
+
 def has_any_user(db: Session) -> bool:
     return db.query(User).first() is not None
 
