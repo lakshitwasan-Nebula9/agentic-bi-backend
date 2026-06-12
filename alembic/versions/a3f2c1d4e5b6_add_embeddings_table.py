@@ -25,7 +25,6 @@ def upgrade() -> None:
     op.create_table(
         "embeddings",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("entity_type", sa.String(50), nullable=False),
         sa.Column("entity_id", sa.String(255), nullable=False),
         sa.Column("content", sa.Text, nullable=False),
@@ -38,7 +37,6 @@ def upgrade() -> None:
     # HNSW index for fast approximate nearest-neighbour cosine search
     op.execute("CREATE INDEX ON embeddings USING hnsw (embedding vector_cosine_ops)")
 
-    op.create_index("ix_embeddings_tenant_id", "embeddings", ["tenant_id"])
     op.create_index("ix_embeddings_entity_type", "embeddings", ["entity_type"])
 
 

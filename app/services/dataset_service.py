@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.agents.messaging import AgentPublisher
 from app.crud import dataset as dataset_crud
 from app.models.dataset import Dataset, DatasetRecord
 from app.schemas.dataset import DatasetCreate
@@ -110,10 +111,17 @@ def sync_dataset(db: Session, dataset_id: uuid.UUID) -> Dataset:
     jsonable_rows = [_jsonable_row(row) for row in rows]
     dataset_crud.replace_dataset_records(db, dataset_id, jsonable_rows)
 
-    return dataset_crud.mark_synced(
+    updated = dataset_crud.mark_synced(
         db,
         dataset,
         row_count=len(jsonable_rows),
         schema_fingerprint=_schema_fingerprint(jsonable_rows),
         synced_at=datetime.now(UTC),
     )
+
+    try:
+        AgentPublisher().publish("dataset_synced", {"dataset_id": str(dataset_id)})
+    except Exception:
+        pass
+
+    return updated
