@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,8 @@ class Dataset(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     source_query: Mapped[str] = mapped_column(Text, nullable=False)
     schema_fingerprint: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    quality_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

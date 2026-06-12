@@ -12,7 +12,6 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 def embed(payload: EmbedRequest, db: Session = Depends(get_db)):
     record = upsert_embedding(
         db,
-        tenant_id=payload.tenant_id,
         entity_type=payload.entity_type,
         entity_id=payload.entity_id,
         content=payload.content,
@@ -24,7 +23,6 @@ def embed(payload: EmbedRequest, db: Session = Depends(get_db)):
 def search(payload: SearchRequest, db: Session = Depends(get_db)):
     records = search_similar(
         db,
-        tenant_id=payload.tenant_id,
         query=payload.query,
         entity_type=payload.entity_type,
         top_k=payload.top_k,

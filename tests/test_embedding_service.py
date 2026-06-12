@@ -1,4 +1,3 @@
-import uuid
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -22,7 +21,7 @@ def test_upsert_creates_new_record():
 
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
-        upsert_embedding(db, uuid.uuid4(), "business_term", "churn", "Customer churn rate")
+        upsert_embedding(db, "business_term", "churn", "Customer churn rate")
         db.add.assert_called_once()
         db.commit.assert_called_once()
 
@@ -35,7 +34,7 @@ def test_upsert_updates_existing_record():
 
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = existing
-        upsert_embedding(db, uuid.uuid4(), "business_term", "churn", "Updated definition")
+        upsert_embedding(db, "business_term", "churn", "Updated definition")
         assert existing.content == "Updated definition"
         assert existing.embedding == fake_embedding
         db.add.assert_not_called()

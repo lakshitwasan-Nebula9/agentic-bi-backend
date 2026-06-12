@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 
 
 class EmbedRequest(BaseModel):
-    tenant_id: uuid.UUID
     entity_type: str = Field(
         ..., examples=["kpi_definition", "business_term", "schema_description"]
     )
@@ -19,7 +18,6 @@ class EmbedResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    tenant_id: uuid.UUID
     query: str
     entity_type: str | None = None
     top_k: int = Field(default=5, ge=1, le=20)
