@@ -50,12 +50,36 @@ def list_dataset_records(
     )
 
 
+def get_all_dataset_records(db: Session, dataset_id: uuid.UUID) -> list[DatasetRecord]:
+    return (
+        db.query(DatasetRecord)
+        .filter(DatasetRecord.dataset_id == dataset_id)
+        .order_by(DatasetRecord.ingested_at)
+        .all()
+    )
+
+
 def mark_synced(
     db: Session, dataset: Dataset, row_count: int, schema_fingerprint: dict, synced_at: datetime
 ) -> Dataset:
     dataset.row_count = row_count
     dataset.schema_fingerprint = schema_fingerprint
     dataset.last_synced_at = synced_at
+    db.commit()
+    db.refresh(dataset)
+    return dataset
+
+
+def update_quality_result(
+    db: Session,
+    dataset: Dataset,
+    quality_metrics: dict,
+    quality_score: float,
+    status: str,
+) -> Dataset:
+    dataset.quality_metrics = quality_metrics
+    dataset.quality_score = quality_score
+    dataset.status = status
     db.commit()
     db.refresh(dataset)
     return dataset
