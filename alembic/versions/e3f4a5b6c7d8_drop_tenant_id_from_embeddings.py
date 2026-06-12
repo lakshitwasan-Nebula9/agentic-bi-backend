@@ -20,8 +20,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.drop_index("ix_embeddings_tenant_id", table_name="embeddings")
-    op.drop_column("embeddings", "tenant_id")
+    # IF EXISTS guards against fresh DBs where a3f2c1d4e5b6 already ran
+    # without tenant_id (after we removed it from that migration)
+    op.execute("DROP INDEX IF EXISTS ix_embeddings_tenant_id")
+    op.execute("ALTER TABLE embeddings DROP COLUMN IF EXISTS tenant_id")
 
 
 def downgrade() -> None:
