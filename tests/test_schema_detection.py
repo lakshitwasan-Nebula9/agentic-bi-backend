@@ -79,9 +79,7 @@ def test_detect_returns_structured_response():
             mock_session = MagicMock()
             mock_session.id = "sess-1"
             mock_ss.create_session = AsyncMock(return_value=mock_session)
-            mock_runner.run_async.return_value = _async_events(
-                [_fake_final_event(_FAKE_JSON)]
-            )
+            mock_runner.run_async.return_value = _async_events([_fake_final_event(_FAKE_JSON)])
 
             from app.agents.schema_detection_agent import detect
 
@@ -124,9 +122,7 @@ def test_detect_auto_embeds_with_correct_args():
             mock_session = MagicMock()
             mock_session.id = "sess-2"
             mock_ss.create_session = AsyncMock(return_value=mock_session)
-            mock_runner.run_async.return_value = _async_events(
-                [_fake_final_event(_FAKE_JSON)]
-            )
+            mock_runner.run_async.return_value = _async_events([_fake_final_event(_FAKE_JSON)])
 
             from app.agents.schema_detection_agent import detect
 

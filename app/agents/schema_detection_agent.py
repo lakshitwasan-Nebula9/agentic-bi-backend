@@ -50,9 +50,7 @@ _runner: Runner = Runner(
 
 async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectResponse:
     if not settings.GEMINI_API_KEY:
-        raise HTTPException(
-            status_code=503, detail="LLM not configured: GEMINI_API_KEY is not set"
-        )
+        raise HTTPException(status_code=503, detail="LLM not configured: GEMINI_API_KEY is not set")
 
     os.environ.setdefault("GOOGLE_API_KEY", settings.GEMINI_API_KEY)
 
@@ -93,9 +91,7 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
     9. Return ONLY valid JSON.
     """
 
-    session = await _session_service.create_session(
-        app_name="schema_detection", user_id="system"
-    )
+    session = await _session_service.create_session(app_name="schema_detection", user_id="system")
     message = types.Content(role="user", parts=[types.Part(text=prompt)])
 
     response_text = ""
@@ -109,9 +105,7 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
     try:
         result = _SchemaLLMOutput.model_validate_json(response_text)
     except Exception as err:
-        raise HTTPException(
-            status_code=502, detail="LLM returned an unparseable response"
-        ) from err
+        raise HTTPException(status_code=502, detail="LLM returned an unparseable response") from err
 
     embed_content = f"""
         Table Name:
