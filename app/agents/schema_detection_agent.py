@@ -108,10 +108,10 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
 
     try:
         result = _SchemaLLMOutput.model_validate_json(response_text)
-    except Exception:
+    except Exception as err:
         raise HTTPException(
             status_code=502, detail="LLM returned an unparseable response"
-        )
+        ) from err
 
     embed_content = f"""
         Table Name:

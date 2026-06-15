@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.agents import schema_detection_agent
 from app.core.database import get_db
 from app.schemas.schema_detection import SchemaDetectRequest, SchemaDetectResponse
-from app.agents import schema_detection_agent
 
 router = APIRouter(prefix="/schema", tags=["schema"])
 
