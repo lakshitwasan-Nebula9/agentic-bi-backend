@@ -1,7 +1,8 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
     APP_NAME: str = "Agentic BI"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
@@ -23,9 +24,6 @@ class Settings(BaseSettings):
     GEMINI_LLM_MODEL: str = "gemini-1.5-flash"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = 384
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

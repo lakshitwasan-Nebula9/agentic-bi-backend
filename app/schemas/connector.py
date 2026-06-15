@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConnectorCreate(BaseModel):
@@ -27,6 +27,8 @@ class ConnectorUpdate(BaseModel):
 
 
 class ConnectorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     name: str
     connector_type: str
@@ -39,9 +41,6 @@ class ConnectorResponse(BaseModel):
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ConnectionTestResult(BaseModel):
