@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DATA_QUALITY_THRESHOLD: float = 60.0
 
     GEMINI_API_KEY: str | None = None
-    GEMINI_LLM_MODEL: str = "gemini-1.5-flash"
+    GEMINI_LLM_MODEL: str = "gemini-2.0-flash"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = 384
 

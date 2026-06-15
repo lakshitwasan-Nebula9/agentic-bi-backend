@@ -100,7 +100,6 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
     ):
         if event.is_final_response() and event.content and event.content.parts:
             response_text = event.content.parts[0].text
-            break
 
     try:
         result = _SchemaLLMOutput.model_validate_json(response_text)
