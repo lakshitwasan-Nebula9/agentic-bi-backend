@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DatasetCreate(BaseModel):
@@ -12,6 +12,8 @@ class DatasetCreate(BaseModel):
 
 
 class DatasetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     connector_id: uuid.UUID
     name: str
@@ -23,9 +25,6 @@ class DatasetResponse(BaseModel):
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class DatasetPreviewResult(BaseModel):
@@ -40,9 +39,8 @@ class DatasetSyncResult(BaseModel):
 
 
 class DatasetRecordResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     row_data: dict[str, Any]
     ingested_at: datetime
-
-    class Config:
-        from_attributes = True
