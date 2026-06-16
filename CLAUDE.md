@@ -49,6 +49,8 @@ docker build -t agentic-bi-backend:ci .
 
 Auto-generated files (alembic migrations, etc.) are **not** exempt from ruff/black.
 
+**Git commits:** always run `git add` and `git commit` as **separate Bash calls** — never chain them with `&&`. The pre-commit hook (`if: "Bash(git commit*)"`) only fires on standalone `git commit` commands and will be skipped if add and commit are chained.
+
 ## Architecture
 
 ### Request flow
