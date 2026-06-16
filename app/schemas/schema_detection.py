@@ -37,3 +37,4 @@ class SchemaDetectResponse(BaseModel):
     business_questions: list[str]
 
     embedding_id: uuid.UUID
+    schema_metadata_id: uuid.UUID
