@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.routers import auth, connectors, dashboards, data_quality, datasets, health, kpis, rag, schema, users
+from app.routers import (
+    auth,
+    connectors,
+    dashboards,
+    data_quality,
+    datasets,
+    health,
+    kpis,
+    rag,
+    schema,
+    users,
+)
 
 app = FastAPI(
     title=settings.APP_NAME,
