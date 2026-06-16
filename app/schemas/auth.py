@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models.user import UserRole
 
@@ -26,11 +26,10 @@ class TokenResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     email: EmailStr
     role: UserRole
     is_admin: bool
     is_active: bool
-
-    class Config:
-        from_attributes = True
