@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.core.config import settings
 from app.routers import (
+    approvals,
     auth,
     connectors,
     dashboards,
@@ -19,6 +20,7 @@ app = FastAPI(
     debug=settings.DEBUG,
 )
 
+app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connectors.router, prefix=settings.API_V1_PREFIX)

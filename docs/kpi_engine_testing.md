@@ -107,34 +107,94 @@ Only include fields you want to change. Bumps the version and writes an audit ro
 
 ---
 
-## Step 8 — Certify a KPI
+## Step 8 — Check the approval queue
 
-`POST /api/v1/kpis/{kpi_id}/certify`
+`GET /api/v1/approvals?entity_type=kpi&status=pending`
 
-```json
-{
-  "certified_by": "bbbbbbbb-0000-0000-0000-000000000001"
-}
-```
-
-Valid only from `pending_review` or `approved` status. Sets `status = "certified"`.
-
----
-
-## Step 9 — Reject a KPI
-
-`POST /api/v1/kpis/{kpi_id}/reject`
+Returns one `ApprovalRequest` per generated KPI. Grab an `id` — you'll use it as `{ar_id}` in steps 9–11.
 
 ```json
 {
-  "rejection_reason": "SQL expression is incorrect for this dataset",
-  "rejected_by": "bbbbbbbb-0000-0000-0000-000000000001"
+  "id": "<ar_id>",
+  "entity_type": "kpi",
+  "current_stage": "analyst_review",
+  "assigned_role": "analyst",
+  "status": "pending",
+  "is_overdue": false
 }
 ```
 
 ---
 
-## Step 10 — View snapshots (computed values)
+## Step 9 — Analyst approves (stage 1 → 2)
+
+`POST /api/v1/approvals/{ar_id}/approve`
+
+```json
+{
+  "actor_id": "bbbbbbbb-0000-0000-0000-000000000001",
+  "actor_role": "analyst",
+  "note": null
+}
+```
+
+AR advances to `current_stage = business_owner_review`. No event published yet.
+
+Wrong role test: use `"actor_role": "executive"` → expect `403`.
+
+---
+
+## Step 10 — Business owner approves (stage 2 → 3)
+
+`POST /api/v1/approvals/{ar_id}/approve`
+
+```json
+{
+  "actor_id": "bbbbbbbb-0000-0000-0000-000000000001",
+  "actor_role": "business_owner",
+  "note": null
+}
+```
+
+AR advances to `current_stage = certification_review`. `kpi_approved` event published.
+
+---
+
+## Step 11 — Certifier approves (final stage — certifies KPI)
+
+`POST /api/v1/approvals/{ar_id}/approve`
+
+```json
+{
+  "actor_id": "bbbbbbbb-0000-0000-0000-000000000001",
+  "actor_role": "executive",
+  "note": null
+}
+```
+
+AR `status` → `approved`, `resolved_at` set. KPI `status` → `certified`. `kpi_certified` event published.
+
+Verify: `GET /api/v1/kpis/{kpi_id}` → `"status": "certified"`.
+
+---
+
+## Step 12 — Reject a KPI (any stage)
+
+`POST /api/v1/approvals/{ar_id}/reject`
+
+```json
+{
+  "actor_id": "bbbbbbbb-0000-0000-0000-000000000001",
+  "actor_role": "analyst",
+  "rejection_reason": "SQL expression is incorrect for this dataset"
+}
+```
+
+Use the `actor_role` matching the current stage (`analyst`, `business_owner`, or `executive`). AR `status` → `rejected`, KPI `status` → `rejected`. `kpi_rejected` event published.
+
+---
+
+## Step 13 — View snapshots (computed values)
 
 `GET /api/v1/kpis/{kpi_id}/snapshots`
 
@@ -142,7 +202,7 @@ Returns time-series snapshot rows. Each snapshot has the computed `value` from w
 
 ---
 
-## Step 11 — Recompute a snapshot
+## Step 14 — Recompute a snapshot
 
 `POST /api/v1/kpis/{kpi_id}/recompute`
 
@@ -150,7 +210,7 @@ No body. Re-executes the KPI's SQL against `dataset_records` and writes a new sn
 
 ---
 
-## Step 12 — Filter KPIs by dataset or status
+## Step 15 — Filter KPIs by dataset or status
 
 ```
 GET /api/v1/kpis?dataset_id=bbbbbbbb-0000-0000-0000-000000000001
@@ -163,10 +223,17 @@ GET /api/v1/kpis?dataset_id=bbbbbbbb-0000-0000-0000-000000000001&status=pending_
 ## KPI Lifecycle
 
 ```
-draft → pending_review → approved → certified
-                      ↘           ↘
-                       rejected    rejected
+draft → pending_review ──────────────────────→ certified
+              ↓ (ApprovalRequest drives this)       ↑
+         analyst_review                             │
+              ↓                               certification_review (executive approves)
+         business_owner_review                      │
+              ↓ kpi_approved published ─────────────┘
+              ↓
+         rejected (any stage)
 ```
+
+KPI status stays `pending_review` through all three approval stages. It only flips to `certified` or `rejected` when the ApprovalRequest is closed.
 
 All state transitions are append-only — every change is recorded in `kpi_versions`.
 
