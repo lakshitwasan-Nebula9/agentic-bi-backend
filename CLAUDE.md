@@ -28,6 +28,29 @@ alembic downgrade -1                               # roll back one migration
 ```
 The `alembic.ini` hardcodes a fallback DB URL, but `alembic/env.py` overrides it with `settings.DATABASE_URL` from `.env` — always set the real URL there.
 
+**Local vs Docker hostname:** `.env` uses `DATABASE_URL=postgresql://user:password@db:5432/agentic_bi` where `db` is the Docker-internal hostname. When running Alembic or pytest locally (outside Docker), override it on the command line:
+```bash
+DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi alembic upgrade head
+DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi python -m pytest tests/
+```
+
+## Pre-Commit Checklist
+
+Run all of these before every commit. Use `/ship` to automate the full sequence.
+
+```bash
+ruff check . --fix && black .          # lint + format (auto-fix)
+ruff check . && black --check .        # verify clean
+docker compose up -d db                # ensure Postgres is up
+DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi alembic upgrade head
+DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi python -m pytest tests/ -v --tb=short
+docker build -t agentic-bi-backend:ci .
+```
+
+Auto-generated files (alembic migrations, etc.) are **not** exempt from ruff/black.
+
+**Git commits:** always run `git add` and `git commit` as **separate Bash calls** — never chain them with `&&`. The pre-commit hook (`if: "Bash(git commit*)"`) only fires on standalone `git commit` commands and will be skipped if add and commit are chained.
+
 ## Architecture
 
 ### Request flow
