@@ -62,6 +62,8 @@ def test_detect_returns_structured_response():
     fake_id = uuid.uuid4()
     fake_record = MagicMock()
     fake_record.id = fake_id
+    fake_schema_meta = MagicMock()
+    fake_schema_meta.id = uuid.uuid4()
 
     async def run():
         with (
@@ -71,6 +73,10 @@ def test_detect_returns_structured_response():
             patch(
                 "app.agents.schema_detection_agent.upsert_embedding",
                 return_value=fake_record,
+            ),
+            patch(
+                "app.agents.schema_detection_agent.upsert_schema_metadata",
+                return_value=fake_schema_meta,
             ),
         ):
             mock_cfg.GEMINI_API_KEY = "fake-key"
@@ -104,6 +110,8 @@ def test_detect_auto_embeds_with_correct_args():
     request = _make_request()
     fake_record = MagicMock()
     fake_record.id = uuid.uuid4()
+    fake_schema_meta = MagicMock()
+    fake_schema_meta.id = uuid.uuid4()
     captured = {}
 
     async def run():
@@ -115,6 +123,10 @@ def test_detect_auto_embeds_with_correct_args():
                 "app.agents.schema_detection_agent.upsert_embedding",
                 return_value=fake_record,
             ) as mock_embed,
+            patch(
+                "app.agents.schema_detection_agent.upsert_schema_metadata",
+                return_value=fake_schema_meta,
+            ),
         ):
             mock_cfg.GEMINI_API_KEY = "fake-key"
             mock_cfg.GEMINI_LLM_MODEL = "gemini-1.5-flash"

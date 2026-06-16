@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.crud.schema_metadata import upsert_schema_metadata
 from app.prompts import load_prompt
 from app.schemas.schema_detection import (
     ColumnAnnotation,
@@ -139,6 +140,20 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
         """
     record = upsert_embedding(db, "schema_description", request.table_name, embed_content)
 
+    schema_meta = upsert_schema_metadata(
+        db,
+        table_name=request.table_name,
+        entity_type=result.entity_type,
+        description=result.description,
+        columns=result.columns,
+        identifiers=result.identifiers,
+        dimensions=result.dimensions,
+        measures=result.measures,
+        date_columns=result.date_columns,
+        suggested_kpis=result.suggested_kpis,
+        business_questions=result.business_questions,
+    )
+
     return SchemaDetectResponse(
         table_name=request.table_name,
         entity_type=result.entity_type,
@@ -151,4 +166,5 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
         suggested_kpis=result.suggested_kpis,
         business_questions=result.business_questions,
         embedding_id=record.id,
+        schema_metadata_id=schema_meta.id,
     )
