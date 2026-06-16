@@ -1,7 +1,18 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.routers import auth, connectors, data_quality, datasets, health, kpis, rag, schema, users
+from app.routers import (
+    auth,
+    connectors,
+    dashboards,
+    data_quality,
+    datasets,
+    health,
+    kpis,
+    rag,
+    schema,
+    users,
+)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -11,6 +22,7 @@ app = FastAPI(
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connectors.router, prefix=settings.API_V1_PREFIX)
+app.include_router(dashboards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(datasets.router, prefix=settings.API_V1_PREFIX)
 app.include_router(data_quality.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rag.router, prefix=settings.API_V1_PREFIX)
