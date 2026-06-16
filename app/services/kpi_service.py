@@ -40,14 +40,6 @@ def certify_kpi(db: Session, kpi_id: uuid.UUID, req: KPICertifyRequest) -> KPIDe
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-def approve_kpi(db: Session, kpi_id: uuid.UUID, approved_by: uuid.UUID) -> KPIDefinition:
-    kpi = _get_or_404(db, kpi_id)
-    try:
-        return kpi_crud.approve_kpi(db, kpi, approved_by)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
 def reject_kpi(db: Session, kpi_id: uuid.UUID, req: KPIRejectRequest) -> KPIDefinition:
     kpi = _get_or_404(db, kpi_id)
     try:
