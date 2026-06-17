@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_ALLOWED_DOMAIN: str | None = None
 
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
     CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
 
     DATA_QUALITY_THRESHOLD: float = 60.0
