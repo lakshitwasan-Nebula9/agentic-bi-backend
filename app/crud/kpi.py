@@ -8,8 +8,7 @@ from app.schemas.kpi import KPICreate, KPIUpdate
 
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"pending_review"},
-    "pending_review": {"approved", "rejected"},
-    "approved": {"certified", "rejected"},
+    "pending_review": {"certified", "rejected"},
     "certified": {"rejected"},
     "rejected": set(),
 }
@@ -71,16 +70,6 @@ def certify_kpi(db: Session, kpi: KPIDefinition, certified_by: uuid.UUID) -> KPI
     kpi.status = "certified"
     kpi.certified_by = certified_by
     kpi.certified_at = datetime.utcnow()
-    kpi.version += 1
-    db.commit()
-    db.refresh(kpi)
-    return kpi
-
-
-def approve_kpi(db: Session, kpi: KPIDefinition, approved_by: uuid.UUID) -> KPIDefinition:
-    _assert_transition(kpi, "approved")
-    _snapshot_version(db, kpi, changed_by=approved_by, reason="approved")
-    kpi.status = "approved"
     kpi.version += 1
     db.commit()
     db.refresh(kpi)

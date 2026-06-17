@@ -27,5 +27,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = 384
 
+    HITL_SLA_ANALYST_HOURS: int = 24
+    HITL_SLA_BUSINESS_OWNER_HOURS: int = 48
+    HITL_SLA_CERTIFICATION_HOURS: int = 72
+
 
 settings = Settings()

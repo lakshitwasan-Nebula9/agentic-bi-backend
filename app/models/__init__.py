@@ -1,3 +1,4 @@
+from app.models.approval_request import ApprovalRequest
 from app.models.connector import DataConnector
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.dataset import Dataset, DatasetRecord
@@ -8,6 +9,7 @@ from app.models.schema_metadata import SchemaMetadata
 from app.models.user import User, UserRole
 
 __all__ = [
+    "ApprovalRequest",
     "DataConnector",
     "Dashboard",
     "DashboardWidget",
