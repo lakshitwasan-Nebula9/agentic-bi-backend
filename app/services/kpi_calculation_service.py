@@ -68,7 +68,7 @@ def compute_and_snapshot(
     kpi: KPIDefinition,
     period_start: datetime | None = None,
     period_end: datetime | None = None,
-) -> KPISnapshot:
+) -> KPISnapshot:  # raises HTTPException(422) if dataset has no records
     """Execute kpi.sql_expression against dataset_records and write a KPISnapshot."""
     try:
         validate_sql_expression(kpi.sql_expression)
@@ -95,8 +95,12 @@ def compute_and_snapshot(
             detail=f"KPI SQL execution failed: {exc}",
         ) from exc
 
-    value = float(result) if result is not None else 0.0
-    return create_snapshot(db, kpi.id, kpi.dataset_id, value, period_start, period_end)
+    if result is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"KPI '{kpi.name}': SQL returned no result — no dataset_records found for dataset {kpi.dataset_id}",
+        )
+    return create_snapshot(db, kpi.id, kpi.dataset_id, float(result), period_start, period_end)
 
 
 def recompute_snapshot(

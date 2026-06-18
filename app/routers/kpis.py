@@ -5,25 +5,43 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.kpi import (
+    KPICategoryResponse,
     KPICertifyRequest,
+    KPIManualCreate,
     KPIRejectRequest,
     KPIResponse,
     KPISnapshotResponse,
     KPIUpdate,
 )
+from app.services import hitl_workflow_service as hitl_svc
 from app.services import kpi_service
 from app.services.kpi_calculation_service import recompute_snapshot
 
 router = APIRouter(tags=["kpis"])
 
 
+@router.get("/kpis/categories", response_model=list[KPICategoryResponse])
+def list_kpi_categories(db: Session = Depends(get_db)):
+    """Return distinct KPI category values so the frontend can build the tab bar dynamically."""
+    return kpi_service.list_categories(db)
+
+
 @router.get("/kpis", response_model=list[KPIResponse])
 def list_kpis(
     dataset_id: uuid.UUID | None = None,
     status: str | None = None,
+    category: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return kpi_service.list_kpis(db, dataset_id=dataset_id, status=status)
+    return kpi_service.list_kpis(db, dataset_id=dataset_id, status=status, category=category)
+
+
+@router.post("/kpis", response_model=KPIResponse, status_code=201)
+def create_kpi_manual(req: KPIManualCreate, db: Session = Depends(get_db)):
+    """Create a KPI from the 'Add New KPI' form and immediately queue it for executive approval."""
+    kpi = kpi_service.create_manual_kpi(db, req)
+    hitl_svc.create_kpi_approval(db, kpi.id)
+    return kpi_service.get_kpi(db, kpi.id)
 
 
 @router.get("/kpis/{kpi_id}", response_model=KPIResponse)
@@ -34,6 +52,19 @@ def get_kpi(kpi_id: uuid.UUID, db: Session = Depends(get_db)):
 @router.put("/kpis/{kpi_id}", response_model=KPIResponse)
 def update_kpi(kpi_id: uuid.UUID, updates: KPIUpdate, db: Session = Depends(get_db)):
     return kpi_service.update_kpi(db, kpi_id, updates)
+
+
+@router.delete("/kpis/{kpi_id}", status_code=204)
+def delete_kpi(kpi_id: uuid.UUID, db: Session = Depends(get_db)):
+    kpi_service.delete_kpi(db, kpi_id)
+
+
+@router.post("/kpis/{kpi_id}/regen", response_model=KPIResponse)
+def regen_kpi(kpi_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Reset a KPI to pending_review and open a new executive approval request."""
+    kpi = kpi_service.regen_kpi(db, kpi_id)
+    hitl_svc.create_kpi_approval(db, kpi.id)
+    return kpi_service.get_kpi(db, kpi_id)
 
 
 @router.post("/kpis/{kpi_id}/certify", response_model=KPIResponse)

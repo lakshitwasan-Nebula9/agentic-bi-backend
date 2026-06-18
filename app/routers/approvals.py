@@ -48,6 +48,16 @@ def seed_approvals(req: SeedApprovalsRequest, db: Session = Depends(get_db)):
     return ars
 
 
+@router.get("/approvals/count")
+def count_approval_requests(
+    entity_type: str = "kpi",
+    db: Session = Depends(get_db),
+):
+    """Return count of pending approvals — used by the KPI Library HITL banner."""
+    pending = list_approvals(db, status="pending", entity_type=entity_type)
+    return {"pending": len(pending)}
+
+
 @router.get("/approvals", response_model=list[ApprovalRequestResponse])
 def list_approval_requests(
     status: str | None = None,

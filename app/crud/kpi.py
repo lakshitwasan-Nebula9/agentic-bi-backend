@@ -9,8 +9,8 @@ from app.schemas.kpi import KPICreate, KPIUpdate
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"pending_review"},
     "pending_review": {"certified", "rejected"},
-    "certified": {"rejected"},
-    "rejected": set(),
+    "certified": {"rejected", "pending_review"},
+    "rejected": {"pending_review"},
 }
 
 
@@ -45,13 +45,21 @@ def list_kpis(
     db: Session,
     dataset_id: uuid.UUID | None = None,
     status: str | None = None,
+    category: str | None = None,
 ) -> list[KPIDefinition]:
     q = db.query(KPIDefinition)
     if dataset_id is not None:
         q = q.filter(KPIDefinition.dataset_id == dataset_id)
     if status is not None:
         q = q.filter(KPIDefinition.status == status)
+    if category is not None:
+        q = q.filter(KPIDefinition.category == category)
     return q.order_by(KPIDefinition.created_at.desc()).all()
+
+
+def list_categories(db: Session) -> list[str]:
+    rows = db.query(KPIDefinition.category).distinct().all()
+    return sorted({r[0] for r in rows if r[0]})
 
 
 def update_kpi(db: Session, kpi: KPIDefinition, updates: KPIUpdate) -> KPIDefinition:
@@ -70,6 +78,25 @@ def certify_kpi(db: Session, kpi: KPIDefinition, certified_by: uuid.UUID) -> KPI
     kpi.status = "certified"
     kpi.certified_by = certified_by
     kpi.certified_at = datetime.utcnow()
+    kpi.version += 1
+    db.commit()
+    db.refresh(kpi)
+    return kpi
+
+
+def delete_kpi(db: Session, kpi: KPIDefinition) -> None:
+    if kpi.status not in {"draft", "rejected"}:
+        raise ValueError(
+            f"Cannot delete a KPI with status '{kpi.status}'. Only draft or rejected KPIs can be deleted."
+        )
+    db.delete(kpi)
+    db.commit()
+
+
+def reset_to_pending_review(db: Session, kpi: KPIDefinition) -> KPIDefinition:
+    _assert_transition(kpi, "pending_review")
+    _snapshot_version(db, kpi, changed_by=None, reason="regen_requested")
+    kpi.status = "pending_review"
     kpi.version += 1
     db.commit()
     db.refresh(kpi)

@@ -44,12 +44,13 @@ def create_kpi_approval(
     existing = get_approval_by_entity(db, "kpi", kpi_id)
     if existing is not None:
         return existing
-    deadline = datetime.now(UTC) + timedelta(hours=settings.HITL_SLA_ANALYST_HOURS)
+    # DEMO: single executive stage only — skipping analyst_review and business_owner_review
+    deadline = datetime.now(UTC) + timedelta(hours=settings.HITL_SLA_CERTIFICATION_HOURS)
     return create_approval_request(
         db,
         entity_type="kpi",
         entity_id=kpi_id,
-        stage="analyst_review",
+        stage="certification_review",
         priority=priority,
         sla_deadline=deadline,
     )
@@ -96,21 +97,11 @@ def process_approval(
             },
         )
 
+    # DEMO: with only one stage this branch is unreachable, but kept for when multi-stage is restored
     next_stage = STAGE_SEQUENCE[current_idx + 1]
     sla_hours = _stage_sla_hours(next_stage)
     new_deadline = datetime.now(UTC) + timedelta(hours=sla_hours)
     advance_stage(db, ar, next_stage, new_deadline)
-
-    if next_stage == "certification_review":
-        return ApprovalOutcome(
-            ar=ar,
-            event_type="kpi_approved",
-            event_payload={
-                "kpi_id": str(ar.entity_id),
-                "ar_id": str(ar.id),
-                "actor_id": str(actor_id),
-            },
-        )
     return ApprovalOutcome(ar=ar)
 
 
@@ -167,8 +158,9 @@ def get_overdue_approvals(db: Session) -> list[ApprovalRequest]:
 
 
 def _stage_sla_hours(stage: str) -> int:
-    return {
-        "analyst_review": settings.HITL_SLA_ANALYST_HOURS,
-        "business_owner_review": settings.HITL_SLA_BUSINESS_OWNER_HOURS,
+    sla_map = {
+        # "analyst_review": settings.HITL_SLA_ANALYST_HOURS,          # DEMO: commented out
+        # "business_owner_review": settings.HITL_SLA_BUSINESS_OWNER_HOURS,  # DEMO: commented out
         "certification_review": settings.HITL_SLA_CERTIFICATION_HOURS,
-    }[stage]
+    }
+    return sla_map[stage]

@@ -4,6 +4,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class KPICategoryResponse(BaseModel):
+    id: str
+    name: str
+
+
 class KPICreate(BaseModel):
     dataset_id: uuid.UUID
     table_name: str
@@ -19,6 +24,17 @@ class KPICreate(BaseModel):
     owner_id: uuid.UUID | None = None
     owner_name: str | None = None
     owner_role: str | None = None
+
+
+class KPIManualCreate(BaseModel):
+    """Schema for KPIs created manually via the KPI Library 'Add New KPI' form."""
+
+    dataset_id: uuid.UUID
+    name: str
+    category: str
+    sql_expression: str
+    description: str | None = None
+    owner_name: str | None = None
 
 
 class KPIUpdate(BaseModel):
@@ -77,3 +93,7 @@ class KPIResponse(BaseModel):
     created_at: datetime
     certified_at: datetime | None
     rejection_reason: str | None
+    # Display-only fields populated by the service layer
+    current_value: float | None = None
+    mom_change_pct: float | None = None
+    data_source_name: str | None = None
