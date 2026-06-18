@@ -5,10 +5,15 @@ from sqlalchemy.orm import Session
 
 from app.models.approval_request import ApprovalRequest
 
-STAGE_SEQUENCE = ["analyst_review", "business_owner_review", "certification_review"]
+# DEMO: collapsed to executive-only approval; analyst and business owner stages commented out
+STAGE_SEQUENCE = [
+    # "analyst_review",
+    # "business_owner_review",
+    "certification_review",
+]
 STAGE_ROLES: dict[str, str] = {
-    "analyst_review": "analyst",
-    "business_owner_review": "business_owner",
+    # "analyst_review": "analyst",
+    # "business_owner_review": "business_owner",
     "certification_review": "executive",
 }
 
