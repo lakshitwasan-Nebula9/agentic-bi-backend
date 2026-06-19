@@ -46,3 +46,25 @@ class ConnectorResponse(BaseModel):
 class ConnectionTestResult(BaseModel):
     success: bool
     message: str = Field(description="Human-readable result of the connection attempt")
+
+
+class ConnectionTestRequest(BaseModel):
+    host: str
+    port: int = 5432
+    database_name: str
+    username: str
+    password: str
+    connector_type: str = "postgres"
+
+
+class TableInfo(BaseModel):
+    table_name: str
+    table_type: str
+    row_estimate: int | None = None
+
+
+class ColumnInfo(BaseModel):
+    column_name: str
+    data_type: str
+    is_nullable: bool
+    column_default: str | None = None

@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Nebula9.ai — Databases</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --brand-primary:#4A3F8A;
+  --brand-secondary:#8E83D9;
+  --brand-tertiary:#675D9A;
+  --brand-accent:#A360B4;
+  --brand-primary-lt:rgba(74,63,138,0.08);
+  --brand-primary-mid:rgba(74,63,138,0.15);
+  --text:#4C4C4C;
+  --text-muted:#6B7280;
+  --text-dim:#9CA3AF;
+  --text-xdim:#B8BCC8;
+  --bg:#F5F6FA;
+  --bg-card:#FFFFFF;
+  --bg-panel:#FFFFFF;
+  --bg-sidebar:#FAFBFD;
+  --border:#EBEBF0;
+  --border-hi:#D8DAE5;
+  --green:#16A34A;--green-bg:#F0FDF4;--green-border:#BBF7D0;
+  --yellow:#D97706;--yellow-bg:#FFFBEB;--yellow-border:#FDE68A;
+  --red:#DC2626;--red-bg:#FEF2F2;--red-border:#FECACA;
+  --font-head:'Plus Jakarta Sans',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --gap:16px;
+  --pad:20px;
+  --rail-w:64px;
+  --rail-w-expanded:200px;
+  --top-nav-h:52px;
+  --domain-nav-h:42px;
+  --radius:12px;--radius-sm:8px;--radius-xs:6px;
+  --shadow:0 1px 4px rgba(74,63,138,.06);
+  --shadow-md:0 4px 12px rgba(74,63,138,.09);
+}
+
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:13px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:4px}
+svg{fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+.app{display:flex;height:100vh;width:100vw;}
+
+/* ══ NAV RAIL ══ */
+.nav-rail{
+  width:var(--rail-w);background:#FFFFFF;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:400;
+  transition:width .3s cubic-bezier(.4,0,.2,1);overflow:hidden;flex-shrink:0;
+}
+.nav-rail.expanded{width:var(--rail-w-expanded);}
+.rail-logo{height:var(--top-nav-h);display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);gap:12px;white-space:nowrap;flex-shrink:0;}
+.logo-mark{width:30px;height:30px;min-width:30px;background:var(--brand-primary);border-radius:8px;color:#fff;font-family:var(--font-head);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.logo-text{font-family:var(--font-head);font-weight:600;font-size:15px;opacity:0;transition:opacity .2s;white-space:nowrap;}
+.nav-rail.expanded .logo-text{opacity:1;}
+.rail-content{flex:1;padding:12px 0;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.rail-item{display:flex;align-items:center;gap:16px;padding:10px 22px;cursor:pointer;color:var(--text-muted);transition:all .15s;white-space:nowrap;}
+.rail-item:hover{background:var(--brand-primary-lt);color:var(--brand-primary);}
+.rail-item.active{color:var(--brand-primary);background:var(--brand-primary-lt);font-weight:600;}
+.rail-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.rail-label{opacity:0;transition:opacity .2s;font-size:12.5px;}
+.nav-rail.expanded .rail-label{opacity:1;}
+.rail-footer{border-top:1px solid var(--border);padding:8px 0;}
+
+/* ══ MAIN COL ══ */
+.main-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+
+/* ══ TOP NAVBAR ══ */
+.top-navbar{
+  height:var(--top-nav-h);background:#FFFFFF;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;flex-shrink:0;position:relative;
+}
+.nav-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.nav-title-btn{display:flex;align-items:center;gap:6px;background:transparent;border:none;cursor:pointer;font-family:var(--font-head);font-weight:600;font-size:15px;color:var(--text);padding:4px 10px;border-radius:6px;transition:background .1s;}
+.nav-title-btn:hover{background:var(--brand-primary-lt);}
+.nav-subtitle{font-size:10.5px;color:var(--brand-primary);font-weight:500;opacity:0.8;cursor:pointer;}
+.nav-right{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.icon-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);cursor:pointer;position:relative;transition:all .15s;background:transparent;}
+.icon-btn:hover{background:var(--brand-primary-lt);border-color:var(--brand-primary);color:var(--brand-primary);}
+.badge{position:absolute;top:-3px;right:-3px;background:#E11D48;color:#fff;font-size:8px;font-weight:700;padding:1px 4px;border-radius:5px;border:1.5px solid #fff;}
+.badge-dot{position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--red);border:1.5px solid #fff;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;cursor:pointer;border:2px solid var(--border);}
+
+/* ══ DOMAIN NAV ══ */
+.domain-nav {
+  position: relative; /* Essential for absolute right positioning */
+  height: var(--domain-nav-h);
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Centers the steps perfectly */
+  padding: 0 24px;
+  flex-shrink: 0;
+}
+
+.domain-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.domain-right {
+  position: absolute; /* Removes it from the flex flow of the center */
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.domain-item{display:flex;align-items:center;gap:6px;padding:0 14px;height:var(--domain-nav-h);font-weight:600;font-size:11.5px;color:var(--text-muted);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;}
+.domain-item:hover{color:var(--text);}
+.domain-item.active{color:var(--brand-primary);border-bottom-color:var(--brand-primary);}
+.step-sep{width:1px;height:16px;background:var(--border);margin:0 2px;}
+.domain-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
+
+/* ══ PAGE BODY ══ */
+.page-body{flex:1;overflow:hidden;display:flex;}
+
+/* ══ MAIN AREA ══ */
+.db-main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+
+/* ══ TOOLBAR ══ */
+.db-toolbar{
+  padding:12px 20px;background:#fff;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;
+}
+.db-page-title{font-family:var(--font-head);font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;}
+.db-count-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--brand-primary-lt);color:var(--brand-primary);border:1px solid var(--brand-primary-mid);white-space:nowrap;}
+.tb-spacer{flex:1;}
+.search-wrap{position:relative;min-width:200px;max-width:260px;}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-xdim);pointer-events:none;}
+.search-input{width:100%;height:32px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xs);padding:0 10px 0 32px;font-size:12px;color:var(--text);outline:none;font-family:var(--font-body);transition:border-color .15s;}
+.search-input:focus{border-color:var(--brand-primary);background:#fff;box-shadow:0 0 0 3px var(--brand-primary-lt);}
+.search-input::placeholder{color:var(--text-xdim);}
+.toolbar-divider{width:1px;height:20px;background:var(--border);flex-shrink:0;}
+.tb-btn{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;padding:6px 12px;border-radius:var(--radius-xs);background:#fff;border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .15s;box-shadow:var(--shadow);white-space:nowrap;}
+.tb-btn:hover{border-color:var(--brand-primary);color:var(--brand-primary);background:var(--brand-primary-lt);}
+.tb-btn.primary{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff;box-shadow:0 2px 8px rgba(74,63,138,.2);}
+.tb-btn.primary:hover{opacity:.88;}
+
+/* ══ VIEW TOGGLE ══ */
+.view-toggle{display:flex;border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;background:var(--bg);}
+.vt-btn{padding:5px 10px;background:transparent;border:none;cursor:pointer;color:var(--text-dim);transition:all .15s;display:flex;align-items:center;}
+.vt-btn.active{background:#fff;color:var(--brand-primary);box-shadow:var(--shadow);}
+.vt-btn:hover:not(.active){color:var(--text-muted);}
+
+/* ══ CONTENT AREA ══ */
+.db-content{padding:var(--gap);flex:1;}
+
+/* ══ STATUS BANNER ══ */
+.status-banner{background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;display:flex;align-items:center;gap:10px;margin-bottom:var(--gap);border-left:3px solid var(--green);}
+.status-banner.warn{border-left-color:var(--yellow);}
+.status-text{font-size:11.5px;color:var(--text-muted);flex:1;}
+.status-text strong{color:var(--text);}
+.status-dots{display:flex;gap:12px;}
+.sdot{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-muted);}
+.sdot-circle{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
+
+/* ══ DB GRID ══ */
+.db-grid {
+  display: grid;
+  /* CHANGE: align-items: stretch ensures all cards in a row have the same height */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--gap);
+  align-items: stretch; 
+}
+
+/* ══ DB CARD ══ */
+.db-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px; /* This is the bottom padding (18px) */
+  cursor: pointer;
+  transition: all .2s;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%; /* Ensures card fills the grid cell */
+}
+.db-card:hover{border-color:var(--border-hi);box-shadow:var(--shadow-md);}
+.db-card.active-card{border-color:var(--brand-primary);box-shadow:0 0 0 3px var(--brand-primary-lt);}
+.db-card::before { display: none !important; }
+.db-card.pg::before{background:var(--brand-primary);}
+.db-card.snow::before{background:var(--brand-secondary);}
+.db-card.mongo::before{background:var(--green);}
+.db-card.mysql::before{background:var(--brand-tertiary);}
+.db-card.csv::before{background:var(--brand-accent);}
+.db-card.api::before{background:var(--yellow);}
+
+.db-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.db-card-icon{width:36px;height:36px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:-.5px;color:#fff;}
+.db-card-icon.pg{background:var(--brand-primary);}
+.db-card-icon.snow{background:var(--brand-secondary);}
+.db-card-icon.mongo{background:var(--green);}
+.db-card-icon.mysql{background:var(--brand-tertiary);}
+.db-card-icon.csv{background:var(--brand-accent);}
+.db-card-icon.api{background:var(--yellow);}
+
+.db-card-name{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px;}
+.db-card-type{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;}
+
+.db-status-pill{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;}
+.db-status-pill.connected{background:var(--green-bg);color:var(--green);}
+.db-status-pill.error{background:var(--red-bg);color:var(--red);}
+.db-status-pill.syncing{background:var(--brand-primary-lt);color:var(--brand-primary);}
+.db-status-pill.idle{background:var(--bg);color:var(--text-dim);border:1px solid var(--border);}
+
+.db-card-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+.db-stat{padding:8px 10px;background:var(--bg);border-radius:var(--radius-xs);border:1px solid var(--border);}
+.db-stat-label{font-size:9px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.db-stat-val{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--text);}
+.db-stat-val.green{color:var(--green);}
+.db-stat-val.yellow{color:var(--yellow);}
+.db-stat-val.red{color:var(--red);}
+
+.db-card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px solid var(--border);}
+.db-sync-info{font-size:10.5px;color:var(--text-dim);display:flex;align-items:center;gap:5px;}
+/* Hide all extra card action buttons (Configure, Delete) */
+.db-card-actions {
+  display: flex !important;
+}
+
+/* Hide specific buttons while keeping the sync one */
+.db-act-btn {
+  display: none !important; /* Hides gear and trash icons */
+}
+
+/* Specifically show the sync button and sync info */
+.db-sync-info {
+  display: flex !important;
+}
+
+/* Re-style the sync button to be subtle on the card */
+.db-card-footer .db-act-btn:first-child {
+  display: flex !important; /* Shows the sync icon (first in the list) */
+  border: none;
+  background: transparent;
+  color: var(--brand-primary);
+}
+
+/* ══ EMPTY STATE ══ */
+.db-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;color:var(--text-dim);gap:12px;}
+.db-empty-icon{width:52px;height:52px;border-radius:50%;background:var(--brand-primary-lt);display:flex;align-items:center;justify-content:center;color:var(--brand-primary);}
+.db-empty-title{font-size:14px;font-weight:600;color:var(--text-muted);}
+.db-empty-sub{font-size:12px;color:var(--text-dim);text-align:center;max-width:300px;line-height:1.5;}
+
+/* ══ INSPECTION DRAWER ══ */
+.inspection-drawer{
+  width:0;overflow:hidden;background:#fff;border-left:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;
+  transition:width .28s cubic-bezier(.4,0,.2,1);z-index:50;
+}
+.inspection-drawer.open{width:400px;}
+.drawer-inner{width:400px;display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.drawer-header{padding:16px 18px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.drawer-header-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.drawer-close{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:#fff;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0;margin-left:auto;}
+.drawer-close:hover{background:var(--red-bg);border-color:var(--red);color:var(--red);}
+.drawer-db-name{font-family:var(--font-head);font-size:16px;font-weight:700;color:var(--text);line-height:1.3;}
+.drawer-db-meta{font-size:10.5px;color:var(--text-dim);margin-top:2px;}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--border);margin:0 -18px;padding:0 18px;gap:0;}
+.drawer-tab{padding:8px 14px;font-size:11.5px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap;}
+.drawer-tab:hover{color:var(--text);}
+.drawer-tab.active{color:var(--brand-primary);border-bottom-color:var(--brand-primary);}
+.drawer-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;}
+.drawer-section-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-bottom:8px;}
+
+/* Tables list */
+.table-list{display:flex;flex-direction:column;gap:4px;}
+.table-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:all .12s;}
+.table-row:hover{background:#fff;border-color:var(--brand-primary);color:var(--brand-primary);}
+.table-row:hover .tr-name{color:var(--brand-primary);}
+.table-row:hover .tr-arrow{color:var(--brand-primary);}
+.tr-icon{width:26px;height:26px;border-radius:var(--radius-xs);background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;}
+.table-row:hover .tr-icon{background:var(--brand-primary-lt);border-color:var(--brand-primary);color:var(--brand-primary);}
+.tr-info{flex:1;min-width:0;}
+.tr-name{font-size:12px;font-weight:600;color:var(--text);}
+.tr-meta{font-size:10px;color:var(--text-dim);margin-top:1px;}
+.tr-badge{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:var(--brand-primary-lt);color:var(--brand-primary);flex-shrink:0;}
+.tr-arrow{color:var(--text-xdim);flex-shrink:0;}
+
+/* Quality score */
+.quality-bar-wrap{margin-bottom:4px;}
+.quality-label-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;font-weight:500;color:var(--text-muted);}
+.quality-score-val{font-weight:700;color:var(--text);}
+.quality-track{height:6px;background:var(--bg);border-radius:4px;border:1px solid var(--border);overflow:hidden;}
+.quality-fill{height:100%;border-radius:4px;transition:width .6s ease;}
+.quality-fill.high{background:var(--green);}
+.quality-fill.med{background:var(--yellow);}
+.quality-fill.low{background:var(--red);}
+.quality-dims{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
+.qdim{padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xs);}
+.qdim-label{font-size:9px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.qdim-val{font-size:12px;font-weight:700;color:var(--text);}
+.qdim-val.good{color:var(--green);}
+.qdim-val.warn{color:var(--yellow);}
+.qdim-val.bad{color:var(--red);}
+
+/* Meta grid */
+.drawer-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.drawer-meta-item{padding:10px 12px;background:var(--bg);border-radius:var(--radius-xs);border:1px solid var(--border);}
+.drawer-meta-label{font-size:9.5px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.drawer-meta-value{font-size:12.5px;font-weight:600;color:var(--text);}
+
+/* Linked items */
+.linked-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xs);margin-bottom:5px;cursor:pointer;transition:all .12s;}
+.linked-item:hover{background:#fff;border-color:var(--border-hi);}
+.linked-item-icon{width:28px;height:28px;border-radius:var(--radius-xs);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.linked-item-icon.kpi{background:var(--brand-primary-lt);color:var(--brand-primary);}
+.linked-item-icon.dash{background:rgba(142,131,217,.1);color:var(--brand-secondary);}
+.linked-item-name{font-size:12px;font-weight:600;color:var(--text);flex:1;}
+.linked-item-meta{font-size:10px;color:var(--text-dim);}
+.linked-item-arrow{color:var(--text-xdim);}
+
+/* Sync log */
+.sync-log{display:flex;flex-direction:column;gap:5px;}
+.sync-entry{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-xs);background:var(--bg);border:1px solid var(--border);}
+.sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sync-dot.success{background:var(--green);}
+.sync-dot.error{background:var(--red);}
+.sync-dot.running{background:var(--brand-primary);}
+.sync-entry-info{flex:1;}
+.sync-entry-label{font-size:11.5px;font-weight:500;color:var(--text);}
+.sync-entry-meta{font-size:10px;color:var(--text-dim);margin-top:1px;}
+.sync-entry-rows{font-size:10px;font-weight:600;color:var(--text-muted);}
+
+.drawer-footer{padding:12px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;background:#fff;}
+.drawer-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:var(--radius-xs);font-size:12px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.drawer-btn:hover{border-color:var(--brand-primary);color:var(--brand-primary);background:var(--brand-primary-lt);}
+.drawer-btn.primary{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff;}
+.drawer-btn.primary:hover{opacity:.88;}
+.drawer-btn.danger:hover{border-color:var(--red);color:var(--red);background:var(--red-bg);}
+
+/* ══ MODALS ══ */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:900;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
+.overlay.visible{display:flex;}
+.modal{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:560px;max-width:96vw;box-shadow:var(--shadow-md);max-height:92vh;overflow-y:auto;}
+.modal-lg{width:640px;}
+.modal h3{font-family:var(--font-head);font-size:16px;font-weight:700;color:var(--text);margin-bottom:18px;display:flex;align-items:center;gap:9px;}
+.modal-body{display:flex;flex-direction:column;gap:14px;}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
+.btn-p{padding:8px 20px;border-radius:var(--radius-xs);font-size:13px;font-weight:600;border:none;cursor:pointer;background:var(--brand-primary);color:#fff;transition:opacity .15s;}
+.btn-p:hover{opacity:.85;}
+.btn-g{padding:8px 16px;border-radius:var(--radius-xs);font-size:13px;font-weight:500;border:1px solid var(--border);background:#fff;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.btn-g:hover{border-color:var(--border-hi);color:var(--text);}
+
+/* Connect modal — connector grid */
+.connector-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.ct-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--border);background:var(--bg);transition:all .15s;}
+.ct-item:hover,.ct-item.selected{border-color:var(--brand-primary);background:var(--brand-primary-lt);}
+.ct-item.selected .ct-icon{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff;}
+.ct-icon{width:38px;height:38px;border-radius:var(--radius-sm);background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:11px;font-weight:800;transition:all .15s;}
+.ct-name{font-size:11px;font-weight:600;color:var(--text-muted);text-align:center;}
+.ct-item.selected .ct-name,.ct-item:hover .ct-name{color:var(--brand-primary);}
+
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;}
+.field input,.field select,.field textarea{background:#fff;border:1px solid var(--border);color:var(--text);border-radius:var(--radius-xs);padding:8px 11px;font-size:13px;outline:none;font-family:var(--font-body);width:100%;transition:border-color .15s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand-primary);box-shadow:0 0 0 3px var(--brand-primary-lt);}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field-hint{font-size:10.5px;color:var(--text-dim);margin-top:2px;}
+.field input[type="password"]{letter-spacing:.08em;}
+
+/* Step indicator */
+.modal-steps{display:flex;align-items:center;gap:0;margin-bottom:18px;}
+.ms-step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-dim);}
+.ms-step.active{color:var(--brand-primary);}
+.ms-step.done{color:var(--green);}
+.ms-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;background:var(--bg);border:1.5px solid var(--border);color:var(--text-dim);flex-shrink:0;}
+.ms-step.active .ms-num{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff;}
+.ms-step.done .ms-num{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+.ms-line{flex:1;height:1px;background:var(--border);margin:0 8px;}
+.ms-line.done{background:var(--green);}
+
+/* Upload zone */
+.upload-zone{border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:24px;text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s;}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--brand-primary);background:var(--brand-primary-lt);}
+.upload-zone-icon{width:42px;height:42px;border-radius:50%;background:var(--brand-primary-lt);color:var(--brand-primary);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;}
+.upload-zone-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;}
+.upload-zone-sub{font-size:11px;color:var(--text-dim);}
+.upload-formats{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+.fmt-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);}
+
+/* Validation checks */
+.validation-checks{display:flex;flex-direction:column;gap:7px;}
+.vcheck{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg);}
+.vcheck.pass{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+.vcheck.loading{background:var(--brand-primary-lt);border-color:var(--brand-primary-mid);color:var(--brand-primary);}
+.vcheck.fail{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+.vcheck-icon{width:16px;height:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.vcheck-label{flex:1;font-weight:500;font-size:11px;}
+.vcheck-meta{font-size:10px;opacity:.75;}
+.spin{animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* AI regen box */
+.ai-regen-box{background:var(--brand-primary-lt);border:1px solid var(--brand-primary-mid);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:flex-start;gap:10px;}
+.ai-regen-icon{width:32px;height:32px;border-radius:var(--radius-xs);background:var(--brand-primary);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ai-regen-text{font-size:12px;color:var(--text-muted);line-height:1.55;}
+.ai-regen-text strong{color:var(--brand-primary);}
+
+/* Success state */
+.success-banner{background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius-sm);padding:14px 16px;display:flex;align-items:flex-start;gap:12px;}
+.success-icon{width:36px;height:36px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.success-title{font-size:13px;font-weight:600;color:var(--green);margin-bottom:3px;}
+.success-sub{font-size:11.5px;color:var(--text-muted);}
+
+/* Next steps */
+.next-steps{display:flex;flex-direction:column;gap:8px;}
+.ns-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;}
+.ns-item:hover{background:#fff;border-color:var(--brand-primary);}
+.ns-item:hover .ns-icon{background:var(--brand-primary);color:#fff;border-color:var(--brand-primary);}
+.ns-icon{width:34px;height:34px;border-radius:var(--radius-xs);background:#fff;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0;transition:all .15s;}
+.ns-title{font-size:12.5px;font-weight:600;color:var(--text);}
+.ns-sub{font-size:10.5px;color:var(--text-dim);margin-top:1px;}
+.ns-arrow{color:var(--text-xdim);margin-left:auto;}
+.ns-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--brand-primary-lt);color:var(--brand-primary);border:1px solid var(--brand-primary-mid);margin-left:8px;white-space:nowrap;}
+
+/* Sync config */
+.sync-option-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.sync-option-row:last-child{border-bottom:none;padding-bottom:0;}
+.sync-option-label{font-size:12px;font-weight:500;color:var(--text);}
+.sync-option-sub{font-size:10.5px;color:var(--text-dim);margin-top:1px;}
+.perm-toggle{width:34px;height:18px;border-radius:9px;background:var(--border-hi);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;border:none;}
+.perm-toggle.on{background:var(--brand-primary);}
+.perm-toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.perm-toggle.on::after{left:18px;}
+
+/* Table preview */
+.table-preview-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.tp-back{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--text-muted);cursor:pointer;padding:4px 8px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg);transition:all .12s;}
+.tp-back:hover{border-color:var(--brand-primary);color:var(--brand-primary);}
+.tp-title{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--text);}
+.mini-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.mini-table th{padding:7px 8px;text-align:left;color:var(--text-dim);font-weight:600;letter-spacing:.04em;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap;}
+.mini-table td{padding:7px 8px;color:var(--text-muted);border-bottom:1px solid #F3F4F6;}
+.mini-table tr:last-child td{border-bottom:none;}
+.mini-table tr:hover td{background:#FAFBFD;color:var(--text);}
+.col-type-pill{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);}
+.col-type-pill.text{background:rgba(74,63,138,.06);color:var(--brand-primary);border-color:var(--brand-primary-mid);}
+.col-type-pill.num{background:rgba(22,163,74,.06);color:var(--green);border-color:var(--green-border);}
+.col-type-pill.date{background:rgba(217,119,6,.06);color:var(--yellow);border-color:var(--yellow-border);}
+.col-type-pill.bool{background:rgba(163,96,180,.06);color:var(--brand-accent);border-color:rgba(163,96,180,.2);}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 16px;font-size:12px;color:var(--text);z-index:999;display:none;align-items:center;gap:8px;box-shadow:var(--shadow-md);}
+.toast.visible{display:flex;}
+.toast-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.toast-icon.success{background:var(--green-bg);color:var(--green);}
+.toast-icon.info{background:var(--brand-primary-lt);color:var(--brand-primary);}
+.toast-icon.warn{background:var(--yellow-bg);color:var(--yellow);}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ═══ LEFT NAV RAIL ═══ -->
+<aside class="nav-rail" id="mainRail">
+  <div class="rail-logo">
+    <div class="logo-mark">N9</div>
+    <span class="logo-text">Nebula9.ai</span>
+  </div>
+  <div class="rail-content">
+    <div class="rail-item" onclick="showToast('info','Home')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+      <span class="rail-label">Home</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','Dashboards')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+      <span class="rail-label">Dashboards</span>
+    </div>
+    <div class="rail-item active">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
+      <span class="rail-label">Databases</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','KPI Library')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
+      <span class="rail-label">KPI Library</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','Inbox')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
+      <span class="rail-label">Inbox</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','Reports')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+      <span class="rail-label">Reports</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','AI Copilot')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <span class="rail-label">AI Copilot</span>
+    </div>
+  </div>
+  <div class="rail-footer">
+    <div class="rail-item" onclick="toggleRail()">
+      <div class="rail-icon" id="collapseIcon"><svg width="18" height="18" viewBox="0 0 24 24"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></div>
+      <span class="rail-label">Collapse Menu</span>
+    </div>
+    <div class="rail-item" onclick="showToast('info','Settings')">
+      <div class="rail-icon"><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg></div>
+      <span class="rail-label">Settings</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN COLUMN ═══ -->
+<div class="main-col">
+
+  <!-- TOP NAVBAR -->
+  <header class="top-navbar">
+    <div class="nav-center">
+<button class="nav-title-btn">
+  <span>Data Sources</span>
+</button>
+
+    </div>
+    <div class="nav-right">
+      <div class="icon-btn" title="AI Copilot" onclick="showToast('info','AI Copilot — coming soon')">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="badge-dot"></span>
+      </div>
+      <div class="icon-btn" title="Notifications" onclick="showToast('info','2 sync errors need attention')">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="badge">2</span>
+      </div>
+      <div class="icon-btn" title="Settings" onclick="showToast('info','Opening settings…')">
+        <svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div class="avatar">AM</div>
+    </div>
+  </header>
+
+  <!-- DOMAIN NAV -->
+  <nav class="domain-nav">
+    <div class="domain-steps">
+      <div class="domain-item active" onclick="setDomainStep(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> All Sources
+      </div>
+      <div class="step-sep"></div>
+      <div class="domain-item" onclick="setDomainStep(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> Relational DB
+      </div>
+      <div class="step-sep"></div>
+      <div class="domain-item" onclick="setDomainStep(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg> NoSQL
+      </div>
+      <div class="step-sep"></div>
+      <div class="domain-item" onclick="setDomainStep(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Flat Files
+      </div>
+      <div class="step-sep"></div>
+      <div class="domain-item" onclick="setDomainStep(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> APIs
+      </div>
+    </div>
+    <div class="domain-right">
+      <select class="select-box" style="background:var(--bg);border:1px solid var(--border);padding:4px 10px;border-radius:var(--radius-xs);font-size:11px;font-weight:500;color:var(--text);cursor:pointer;outline:none;font-family:var(--font-body);" onchange="showToast('info','Filter: '+this.value)">
+        <option>All Status</option><option>Connected</option><option>Error</option><option>Syncing</option>
+      </select>
+    </div>
+  </nav>
+
+  <!-- PAGE BODY -->
+  <div class="page-body">
+
+    <!-- ═══ MAIN DB AREA ═══ -->
+    <div class="db-main">
+
+      <!-- TOOLBAR -->
+      <div class="db-toolbar">
+        <span class="db-page-title">Databases</span>
+        <span class="db-count-badge" id="dbCountBadge">5 Sources</span>
+        <div class="tb-spacer"></div>
+        <div class="search-wrap">
+          <span class="search-icon"><svg width="13" height="13" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+          <input class="search-input" type="text" placeholder="Search databases…" oninput="handleSearch(this.value)"/>
+        </div>
+        <div class="view-toggle">
+          <button class="vt-btn active" id="gridViewBtn" onclick="setView('grid')" title="Grid view">
+            <svg width="13" height="13" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button class="vt-btn" id="listViewBtn" onclick="setView('list')" title="List view">
+            <svg width="13" height="13" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="toolbar-divider"></div>
+        <button class="tb-btn" onclick="openModal('uploadModal')">
+          <svg width="12" height="12" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload File
+        </button>
+        <button class="tb-btn primary" onclick="openConnectModal()">
+          <svg width="12" height="12" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect Database
+        </button>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="db-content">
+
+        <!-- Status banner -->
+        <div class="status-banner warn">
+          <svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--yellow);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="status-text"><strong>MongoDB Events DB</strong> — Last sync failed 2 hours ago. <span style="color:var(--brand-primary);font-weight:600;cursor:pointer;" onclick="openDrawerById('mongo-1');showToast('info','Opening MongoDB details…')">Investigate →</span></span>
+          <div class="status-dots">
+            <div class="sdot"><div class="sdot-circle" style="background:var(--green)"></div>4 healthy</div>
+            <div class="sdot"><div class="sdot-circle" style="background:var(--red)"></div>1 error</div>
+            <div class="sdot"><div class="sdot-circle" style="background:var(--brand-primary)"></div>1 syncing</div>
+          </div>
+        </div>
+
+        <!-- DB Grid -->
+        <div class="db-grid" id="dbGrid">
+
+          <!-- PostgreSQL -->
+          <div class="db-card pg" id="card-pg-1" onclick="openDrawer('pg-1')">
+            <div class="db-card-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="db-card-icon pg">PG</div>
+                <div>
+                  <div class="db-card-name">Sales Database</div>
+                  <div class="db-card-type">PostgreSQL</div>
+                </div>
+              </div>
+              <span class="db-status-pill connected">
+                <svg width="6" height="6" viewBox="0 0 8 8" style="fill:var(--green);stroke:none"><circle cx="4" cy="4" r="4"/></svg>Connected
+              </span>
+            </div>
+            <div class="db-card-stats">
+              <div class="db-stat"><div class="db-stat-label">Tables</div><div class="db-stat-val">18</div></div>
+              <div class="db-stat"><div class="db-stat-label">KPIs</div><div class="db-stat-val green">12</div></div>
+              <div class="db-stat"><div class="db-stat-label">Quality</div><div class="db-stat-val green">94%</div></div>
+            </div>
+            <div class="db-card-footer">
+              <span class="db-sync-info">
+                <svg width="10" height="10" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Synced 4 min ago
+              </span>
+              <div class="db-card-actions">
+                <div class="db-act-btn" onclick="event.stopPropagation();syncNow('Sales Database')" title="Sync now"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+              
+             
+              </div>
+            </div>
+          </div>
+
+          <!-- Snowflake -->
+          <div class="db-card snow" id="card-snow-1" onclick="openDrawer('snow-1')">
+            <div class="db-card-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="db-card-icon snow">SF</div>
+                <div>
+                  <div class="db-card-name">Analytics Warehouse</div>
+                  <div class="db-card-type">Snowflake</div>
+                </div>
+              </div>
+              <span class="db-status-pill syncing">
+                <svg class="spin" width="9" height="9" viewBox="0 0 24 24" style="stroke:var(--brand-primary)"><path d="M21 12a9 9 0 1 1-3.12-6.82" stroke-width="2.5"/></svg>Syncing
+              </span>
+            </div>
+            <div class="db-card-stats">
+              <div class="db-stat"><div class="db-stat-label">Tables</div><div class="db-stat-val">42</div></div>
+              <div class="db-stat"><div class="db-stat-label">KPIs</div><div class="db-stat-val green">8</div></div>
+              <div class="db-stat"><div class="db-stat-label">Quality</div><div class="db-stat-val green">97%</div></div>
+            </div>
+            <div class="db-card-footer">
+              <span class="db-sync-info">
+                <svg width="10" height="10" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Syncing now…
+              </span>
+              <div class="db-card-actions">
+                <div class="db-act-btn" onclick="event.stopPropagation();showToast('info','Sync in progress')" title="Syncing"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+                <div class="db-act-btn" onclick="event.stopPropagation();showToast('info','Configure Analytics Warehouse')" title="Configure"><svg width="11" height="11" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83"/></svg></div>
+                <div class="db-act-btn danger" onclick="event.stopPropagation();disconnectDB('Analytics Warehouse')" title="Disconnect"><svg width="11" height="11" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MongoDB -->
+          <div class="db-card mongo" id="card-mongo-1" onclick="openDrawer('mongo-1')">
+            <div class="db-card-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="db-card-icon mongo">MG</div>
+                <div>
+                  <div class="db-card-name">Events DB</div>
+                  <div class="db-card-type">MongoDB</div>
+                </div>
+              </div>
+              <span class="db-status-pill error">
+                <svg width="6" height="6" viewBox="0 0 8 8" style="fill:var(--red);stroke:none"><circle cx="4" cy="4" r="4"/></svg>Sync Error
+              </span>
+            </div>
+            <div class="db-card-stats">
+              <div class="db-stat"><div class="db-stat-label">Collections</div><div class="db-stat-val">9</div></div>
+              <div class="db-stat"><div class="db-stat-label">KPIs</div><div class="db-stat-val yellow">3</div></div>
+              <div class="db-stat"><div class="db-stat-label">Quality</div><div class="db-stat-val yellow">71%</div></div>
+            </div>
+            <div class="db-card-footer">
+              <span class="db-sync-info" style="color:var(--red)">
+                <svg width="10" height="10" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+                Failed 2 hrs ago
+              </span>
+              <div class="db-card-actions">
+                <div class="db-act-btn" onclick="event.stopPropagation();syncNow('Events DB')" title="Retry sync"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+                <div class="db-act-btn" onclick="event.stopPropagation();showToast('info','Configure Events DB')" title="Configure"><svg width="11" height="11" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg></div>
+                <div class="db-act-btn danger" onclick="event.stopPropagation();disconnectDB('Events DB')" title="Disconnect"><svg width="11" height="11" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CSV Upload -->
+          <div class="db-card csv" id="card-csv-1" onclick="openDrawer('csv-1')">
+            <div class="db-card-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="db-card-icon csv">CSV</div>
+                <div>
+                  <div class="db-card-name">Q2 Regional Data</div>
+                  <div class="db-card-type">CSV Upload</div>
+                </div>
+              </div>
+              <span class="db-status-pill connected">
+                <svg width="6" height="6" viewBox="0 0 8 8" style="fill:var(--green);stroke:none"><circle cx="4" cy="4" r="4"/></svg>Connected
+              </span>
+            </div>
+            <div class="db-card-stats">
+              <div class="db-stat"><div class="db-stat-label">Sheets</div><div class="db-stat-val">4</div></div>
+              <div class="db-stat"><div class="db-stat-label">KPIs</div><div class="db-stat-val green">5</div></div>
+              <div class="db-stat"><div class="db-stat-label">Quality</div><div class="db-stat-val green">88%</div></div>
+            </div>
+            <div class="db-card-footer">
+              <span class="db-sync-info">
+                <svg width="10" height="10" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+                Uploaded Jun 12
+              </span>
+              <div class="db-card-actions">
+                <div class="db-act-btn" onclick="event.stopPropagation();showToast('info','Re-upload Q2 Regional Data')" title="Re-upload"><svg width="11" height="11" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                <div class="db-act-btn danger" onclick="event.stopPropagation();disconnectDB('Q2 Regional Data')" title="Remove"><svg width="11" height="11" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- REST API -->
+          <div class="db-card api" id="card-api-1" onclick="openDrawer('api-1')">
+            <div class="db-card-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="db-card-icon api">API</div>
+                <div>
+                  <div class="db-card-name">CRM REST API</div>
+                  <div class="db-card-type">REST API</div>
+                </div>
+              </div>
+              <span class="db-status-pill connected">
+                <svg width="6" height="6" viewBox="0 0 8 8" style="fill:var(--green);stroke:none"><circle cx="4" cy="4" r="4"/></svg>Connected
+              </span>
+            </div>
+            <div class="db-card-stats">
+              <div class="db-stat"><div class="db-stat-label">Endpoints</div><div class="db-stat-val">6</div></div>
+              <div class="db-stat"><div class="db-stat-label">KPIs</div><div class="db-stat-val green">4</div></div>
+              <div class="db-stat"><div class="db-stat-label">Quality</div><div class="db-stat-val green">91%</div></div>
+            </div>
+            <div class="db-card-footer">
+              <span class="db-sync-info">
+                <svg width="10" height="10" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Synced 18 min ago
+              </span>
+              <div class="db-card-actions">
+                <div class="db-act-btn" onclick="event.stopPropagation();syncNow('CRM REST API')" title="Sync now"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+                <div class="db-act-btn" onclick="event.stopPropagation();showToast('info','Configure CRM REST API')" title="Configure"><svg width="11" height="11" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg></div>
+                <div class="db-act-btn danger" onclick="event.stopPropagation();disconnectDB('CRM REST API')" title="Disconnect"><svg width="11" height="11" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add new placeholder -->
+          <div class="db-card" style="border:1.5px dashed var(--border);background:var(--bg);cursor:pointer;align-items:center;justify-content:center;min-height:180px;" onclick="openConnectModal()">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:20px;">
+              <div style="width:42px;height:42px;border-radius:50%;background:var(--brand-primary-lt);display:flex;align-items:center;justify-content:center;color:var(--brand-primary);">
+                <svg width="18" height="18" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <div style="font-size:12.5px;font-weight:600;color:var(--text-muted);">Connect a Source</div>
+              <div style="font-size:11px;color:var(--text-dim);max-width:160px;line-height:1.45;">Database, API, or upload a file to get started</div>
+            </div>
+          </div>
+
+        </div><!-- /db-grid -->
+      </div><!-- /db-content -->
+    </div><!-- /db-main -->
+
+    <!-- ═══ INSPECTION DRAWER ═══ -->
+    <div class="inspection-drawer" id="inspectionDrawer">
+      <div class="drawer-inner">
+        <div class="drawer-header">
+          <div class="drawer-header-top">
+            <div>
+              <div class="drawer-db-name" id="drawerName">—</div>
+              <div class="drawer-db-meta" id="drawerMeta">—</div>
+            </div>
+            <button class="drawer-close" onclick="closeDrawer()">
+              <svg width="12" height="12" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+<div class="drawer-tabs">
+  <div class="drawer-tab active" id="tab-linked" onclick="switchTab('linked')">KPIs & Dashboards</div>
+  <div class="drawer-tab" id="tab-tables" onclick="switchTab('tables')">Tables</div>
+  <div class="drawer-tab" id="tab-quality" onclick="switchTab('quality')">Data Quality</div>
+  <div class="drawer-tab" id="tab-sync" onclick="switchTab('sync')">Sync Log</div>
+</div>
+        </div>
+
+        <!-- Tab: Tables -->
+        <div class="drawer-body" id="panel-tables">
+          <div id="tableListView">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div class="drawer-section-title" style="margin-bottom:0">18 tables detected</div>
+              <div style="font-size:10px;color:var(--text-dim);">Click to preview schema</div>
+            </div>
+            <div class="table-list" id="tableList"></div>
+          </div>
+          <div id="tablePreviewView" style="display:none">
+            <div class="table-preview-header">
+              <button class="tp-back" onclick="showTableList()">
+                <svg width="11" height="11" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>All tables
+              </button>
+              <span class="tp-title" id="previewTableName">orders</span>
+            </div>
+            <div class="drawer-section-title">Schema — 8 columns</div>
+            <div style="overflow-x:auto;">
+              <table class="mini-table" id="schemaTable"></table>
+            </div>
+            <div style="margin-top:12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-xs);border:1px solid var(--border);">
+              <div class="drawer-section-title" style="margin-bottom:6px;">Sample rows</div>
+              <div style="font-size:11px;color:var(--text-dim);line-height:1.6;">240,482 rows · Last synced 4 min ago · No null violations</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Quality -->
+        <div class="drawer-body" id="panel-quality" style="display:none">
+          <div>
+            <div class="drawer-section-title">Overall Quality Score</div>
+            <div class="quality-bar-wrap">
+              <div class="quality-label-row">
+                <span>Data Quality</span>
+                <span class="quality-score-val" id="qualityScoreVal">94%</span>
+              </div>
+              <div class="quality-track"><div class="quality-fill high" id="qualityFill" style="width:94%"></div></div>
+            </div>
+            <div class="quality-dims">
+              <div class="qdim"><div class="qdim-label">Completeness</div><div class="qdim-val good" id="qCompleteness">98%</div></div>
+              <div class="qdim"><div class="qdim-label">Consistency</div><div class="qdim-val good" id="qConsistency">96%</div></div>
+              <div class="qdim"><div class="qdim-label">Recency</div><div class="qdim-val good" id="qRecency">100%</div></div>
+              <div class="qdim"><div class="qdim-label">Null Rate</div><div class="qdim-val warn" id="qNull">2.1%</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="drawer-section-title">Connection Details</div>
+            <div class="drawer-meta-grid" id="drawerMetaGrid"></div>
+          </div>
+          <div>
+            <div class="drawer-section-title">Sync Configuration</div>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;">
+              <div class="sync-option-row">
+                <div><div class="sync-option-label">Sync Frequency</div><div class="sync-option-sub">How often data is pulled</div></div>
+                <select style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg);color:var(--text);cursor:pointer;outline:none;" onchange="showToast('success','Sync frequency updated')"><option>Every hour</option><option>Every 30 min</option><option>Real-time</option><option>Daily</option><option>On-demand</option></select>
+              </div>
+              <div class="sync-option-row">
+                <div><div class="sync-option-label">Incremental Sync</div><div class="sync-option-sub">Only pull changed rows</div></div>
+                <button class="perm-toggle on" onclick="this.classList.toggle('on')"></button>
+              </div>
+              <div class="sync-option-row">
+                <div><div class="sync-option-label">Quality Quarantine</div><div class="sync-option-sub">Block low-quality data from agents</div></div>
+                <button class="perm-toggle on" onclick="this.classList.toggle('on')"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: KPIs & Dashboards -->
+<div class="drawer-body" id="panel-linked">
+  <!-- DASHBOARDS TOP -->
+  <div>
+    <div class="drawer-section-title">Connected Dashboards</div>
+    <div id="linkedDashboards"></div>
+  </div>
+
+  <!-- KPIs BOTTOM -->
+  <div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div class="drawer-section-title" style="margin-bottom:0">KPIs from this source</div>
+        <button class="view-all-btn" style="padding:2px 8px; font-size:9px;" onclick="showToast('info','Opening KPI Workspace…')">View Workspace →</button>
+    </div>
+    <div id="linkedKPIs"></div>
+  </div>
+</div>
+
+        <!-- Tab: Sync Log -->
+        <div class="drawer-body" id="panel-sync" style="display:none">
+          <div>
+            <div class="drawer-section-title">Recent Sync Events</div>
+            <div class="sync-log" id="syncLog"></div>
+          </div>
+        </div>
+
+        <div class="drawer-footer">
+          <button class="drawer-btn primary" onclick="syncNowFromDrawer()">
+            <svg width="12" height="12" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Sync Now
+          </button>
+          <button class="drawer-btn" onclick="showToast('info','Opening configuration…')">
+            <svg width="12" height="12" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83"/></svg>Configure
+          </button>
+          <button class="drawer-btn danger" onclick="disconnectDB(activeDrawerDB)">
+            <svg width="12" height="12" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Disconnect
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-body -->
+</div><!-- /main-col -->
+</div><!-- /app -->
+
+<!-- ═══ CONNECT DATABASE MODAL ═══ -->
+<div class="overlay" id="connectModal">
+  <div class="modal modal-lg">
+    <h3>
+      <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      Connect a Data Source
+    </h3>
+
+    <!-- Steps -->
+    <div class="modal-steps">
+      <div class="ms-step active" id="ms-1"><div class="ms-num">1</div><span>Choose Type</span></div>
+      <div class="ms-line" id="ms-line-1"></div>
+      <div class="ms-step" id="ms-2"><div class="ms-num">2</div><span>Configure</span></div>
+      <div class="ms-line" id="ms-line-2"></div>
+      <div class="ms-step" id="ms-3"><div class="ms-num">3</div><span>Test & Connect</span></div>
+      <div class="ms-line" id="ms-line-3"></div>
+      <div class="ms-step" id="ms-4"><div class="ms-num">4</div><span>Ready</span></div>
+    </div>
+
+    <!-- Panel 1: Choose type -->
+    <div class="modal-body" id="connect-panel-1">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Relational Databases</div>
+        <div class="connector-type-grid">
+          <div class="ct-item" onclick="selectConnector(this,'PostgreSQL')"><div class="ct-icon">PG</div><div class="ct-name">PostgreSQL</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'MySQL')"><div class="ct-icon">MY</div><div class="ct-name">MySQL</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'SQL Server')"><div class="ct-icon">MS</div><div class="ct-name">SQL Server</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'Snowflake')"><div class="ct-icon">SF</div><div class="ct-name">Snowflake</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'BigQuery')"><div class="ct-icon">BQ</div><div class="ct-name">BigQuery</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'Redshift')"><div class="ct-icon">RS</div><div class="ct-name">Redshift</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">NoSQL & APIs</div>
+        <div class="connector-type-grid">
+          <div class="ct-item" onclick="selectConnector(this,'MongoDB')"><div class="ct-icon">MG</div><div class="ct-name">MongoDB</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'REST API')"><div class="ct-icon">API</div><div class="ct-name">REST API</div></div>
+          <div class="ct-item" onclick="selectConnector(this,'GraphQL')"><div class="ct-icon">GQL</div><div class="ct-name">GraphQL</div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-g" onclick="closeModal('connectModal')">Cancel</button>
+        <button class="btn-p" id="connectNext1" onclick="connectGoStep(2)" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- Panel 2: Configure credentials -->
+    <div class="modal-body" id="connect-panel-2" style="display:none">
+      <div class="field"><label>Connection Name</label><input type="text" id="connName" placeholder="e.g. Production Sales DB"/></div>
+      <div class="field-row">
+        <div class="field"><label>Host / Endpoint</label><input type="text" id="connHost" placeholder="db.company.com or 10.0.0.1"/></div>
+        <div class="field"><label>Port</label><input type="text" id="connPort" placeholder="5432"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Database Name</label><input type="text" id="connDB" placeholder="sales_production"/></div>
+        <div class="field"><label>Schema</label><input type="text" id="connSchema" placeholder="public"/></div>
+      </div>
+      <div class="field"><label>Authentication</label>
+        <select id="connAuthType" onchange="toggleAuthFields()">
+          <option value="userpass">Username & Password</option>
+          <option value="apikey">API Key</option>
+          <option value="oauth">OAuth 2.0</option>
+          <option value="bearer">Bearer Token</option>
+        </select>
+      </div>
+      <div id="authFields-userpass" class="field-row">
+        <div class="field"><label>Username</label><input type="text" id="connUser" placeholder="db_user"/></div>
+        <div class="field"><label>Password</label><input type="password" id="connPass" placeholder="••••••••"/></div>
+      </div>
+      <div id="authFields-apikey" style="display:none">
+        <div class="field"><label>API Key</label><input type="text" placeholder="sk-xxxxxxxxxxxxxxxx"/><div class="field-hint">Key is encrypted at rest and never exposed in logs.</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+        <input type="checkbox" id="connSSL" style="accent-color:var(--brand-primary);width:14px;height:14px;"/>
+        <label for="connSSL" style="font-size:12px;color:var(--text-muted);cursor:pointer;">Use SSL / TLS encryption</label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-g" onclick="connectGoStep(1)">← Back</button>
+        <button class="btn-p" onclick="connectGoStep(3)">Test Connection →</button>
+      </div>
+    </div>
+
+    <!-- Panel 3: Test & validate -->
+    <div class="modal-body" id="connect-panel-3" style="display:none">
+      <div class="validation-checks" id="connectChecks">
+        <div class="vcheck loading" id="cc-1"><div class="vcheck-icon"><svg class="spin" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.12-6.82" stroke-width="2.5"/></svg></div><div class="vcheck-label">Testing connection…</div></div>
+        <div class="vcheck" id="cc-2" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Detecting schema</div></div>
+        <div class="vcheck" id="cc-3" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Running data quality scan</div></div>
+        <div class="vcheck" id="cc-4" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Registering connector</div></div>
+      </div>
+      <div class="ai-regen-box" id="connectAIHint" style="display:none">
+        <div class="ai-regen-icon"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="ai-regen-text"><strong>Ready!</strong> Schema detected — 18 tables, 94% data quality. Nebula9 will now run the KPI Agent to generate certified metrics from your data.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-g" onclick="connectGoStep(2)">← Back</button>
+        <button class="btn-p" id="connectBtn4" onclick="connectGoStep(4)" disabled>Connect & Generate KPIs →</button>
+      </div>
+    </div>
+
+    <!-- Panel 4: Success + Next Steps -->
+    <div class="modal-body" id="connect-panel-4" style="display:none">
+      <div class="success-banner">
+        <div class="success-icon"><svg width="18" height="18" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div>
+          <div class="success-title">Database connected successfully</div>
+          <div class="success-sub"><span id="connectedDbName">Sales DB</span> · 18 tables · 240K rows · Quality score: 94%</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px;">What would you like to do next?</div>
+        <div class="next-steps">
+          <div class="ns-item" onclick="closeModal('connectModal');showToast('success','KPI Agent is running — check KPI Library in a moment')">
+            <div class="ns-icon kpi" style="background:var(--brand-primary-lt);color:var(--brand-primary);border-color:var(--brand-primary-mid)">
+              <svg width="15" height="15" viewBox="0 0 24 24"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+            </div>
+            <div>
+              <div class="ns-title">View generated KPIs<span class="ns-badge">12 ready</span></div>
+              <div class="ns-sub">Review and certify AI-proposed KPIs from this source</div>
+            </div>
+            <div class="ns-arrow"><svg width="13" height="13" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+          </div>
+          <div class="ns-item" onclick="closeModal('connectModal');showToast('info','Opening Dashboard Builder…')">
+            <div class="ns-icon" style="background:rgba(142,131,217,.1);color:var(--brand-secondary);border-color:rgba(142,131,217,.2)">
+              <svg width="15" height="15" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div>
+              <div class="ns-title">Build a Dashboard</div>
+              <div class="ns-sub">Create a visualisation from the connected data</div>
+            </div>
+            <div class="ns-arrow"><svg width="13" height="13" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+          </div>
+          <div class="ns-item" onclick="closeModal('connectModal');showToast('info','Returning to Databases…')">
+            <div class="ns-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+            <div>
+              <div class="ns-title">Back to Databases</div>
+              <div class="ns-sub">Configure sync settings or explore schema</div>
+            </div>
+            <div class="ns-arrow"><svg width="13" height="13" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ UPLOAD FILE MODAL ═══ -->
+<div class="overlay" id="uploadModal">
+  <div class="modal modal-lg">
+    <h3>
+      <svg width="15" height="15" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Data File
+    </h3>
+    <div class="modal-body">
+      <div class="upload-zone" id="uploadDropZone"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="onFileDrop(event)"
+        onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" style="display:none" accept=".csv,.xlsx,.json,.parquet" onchange="onFileSelect(this)"/>
+        <div class="upload-zone-icon"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="upload-zone-title" id="uploadZoneTitle">Drag & drop your file here</div>
+        <div class="upload-zone-sub">or click to browse your files</div>
+        <div class="upload-formats">
+          <span class="fmt-tag">CSV</span><span class="fmt-tag">XLSX</span><span class="fmt-tag">JSON</span><span class="fmt-tag">Parquet</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Dataset Name</label>
+        <input type="text" id="uploadName" placeholder="e.g. Q3 Sales Report"/>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Domain</label>
+          <select>
+            <option>Revenue</option><option>Operations</option><option>Customer</option><option>Finance</option><option>Marketing</option>
+          </select>
+        </div>
+        <div class="field"><label>Business Owner</label>
+          <input type="text" placeholder="e.g. Priya Sharma"/>
+        </div>
+      </div>
+      <div class="ai-regen-box">
+        <div class="ai-regen-icon"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="ai-regen-text"><strong>Auto-detection on:</strong> Nebula9 will infer column types, detect primary keys, score data quality, and propose KPIs once the file is processed.</div>
+      </div>
+      <div class="validation-checks" id="uploadChecks" style="display:none">
+        <div class="vcheck loading" id="uc-1"><div class="vcheck-icon"><svg class="spin" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.12-6.82" stroke-width="2.5"/></svg></div><div class="vcheck-label">Parsing file…</div></div>
+        <div class="vcheck" id="uc-2" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Detecting schema & types</div></div>
+        <div class="vcheck" id="uc-3" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Scoring data quality</div></div>
+        <div class="vcheck" id="uc-4" style="opacity:.35"><div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">Ready to import</div></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-g" onclick="closeModal('uploadModal')">Cancel</button>
+      <button class="btn-p" onclick="doUpload()">Upload & Process</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-icon" id="toastIcon"></div>
+  <span id="toastMsg"></span>
+</div>
+
+<script>
+/* ══════════════════════════
+   DATA
+══════════════════════════ */
+const DB_DATA = {
+  'pg-1':{
+    name:'Sales Database',type:'PostgreSQL',status:'connected',
+    host:'db.nebula9.ai',port:'5432',dbName:'sales_production',schema:'public',
+    tables:18,kpis:12,dashboards:3,quality:94,
+    syncedAgo:'4 min ago',syncFreq:'Every hour',
+    completeness:98,consistency:96,recency:100,nullRate:2.1,
+    tables_list:[
+      {name:'orders',rows:'240,482',cols:8},{name:'order_items',rows:'820,103',cols:6},
+      {name:'customers',rows:'48,210',cols:12},{name:'products',rows:'3,420',cols:9},
+      {name:'regions',rows:'42',cols:5},{name:'sales_reps',rows:'128',cols:7},
+      {name:'returns',rows:'12,830',cols:6},{name:'discounts',rows:'9,210',cols:5},
+    ],
+    linked_kpis:['Total Revenue','Avg Order Value','Fulfillment Rate','Gross Margin %','Revenue by Region'],
+    linked_dashboards:['Q2 2025 — Revenue & Growth','Regional Performance','Executive Summary'],
+    sync_log:[
+      {status:'success',label:'Full sync completed',meta:'Jun 17, 09:42 AM',rows:'240,482 rows'},
+      {status:'success',label:'Incremental sync',meta:'Jun 17, 08:42 AM',rows:'1,204 rows updated'},
+      {status:'success',label:'Incremental sync',meta:'Jun 17, 07:42 AM',rows:'980 rows updated'},
+      {status:'success',label:'Schema change detected — full refresh',meta:'Jun 16, 11:00 PM',rows:'238,910 rows'},
+      {status:'error',label:'Sync failed — connection timeout',meta:'Jun 16, 06:00 PM',rows:'Retried 3×'},
+    ]
+  },
+  'snow-1':{
+    name:'Analytics Warehouse',type:'Snowflake',status:'syncing',
+    host:'xy12345.snowflakecomputing.com',port:'443',dbName:'analytics_warehouse',schema:'public',
+    tables:42,kpis:8,dashboards:2,quality:97,
+    syncedAgo:'Syncing now…',syncFreq:'Every 30 min',
+    completeness:99,consistency:98,recency:95,nullRate:0.8,
+    tables_list:[
+      {name:'fact_revenue',rows:'1.2M',cols:14},{name:'dim_customer',rows:'48K',cols:18},
+      {name:'dim_product',rows:'3.4K',cols:11},{name:'dim_time',rows:'3,650',cols:8},
+      {name:'fact_orders',rows:'820K',cols:12},{name:'fact_returns',rows:'48K',cols:9},
+    ],
+    linked_kpis:['Gross Margin %','Inventory Turnover','CAC','NPS Score'],
+    linked_dashboards:['FY24 Annual Performance','Finance Overview'],
+    sync_log:[
+      {status:'running',label:'Incremental sync in progress…',meta:'Jun 17, 10:01 AM',rows:'Fetching…'},
+      {status:'success',label:'Incremental sync',meta:'Jun 17, 09:30 AM',rows:'4,812 rows updated'},
+      {status:'success',label:'Incremental sync',meta:'Jun 17, 09:00 AM',rows:'3,920 rows updated'},
+    ]
+  },
+  'mongo-1':{
+    name:'Events DB',type:'MongoDB',status:'error',
+    host:'mongo.nebula9.ai',port:'27017',dbName:'events_prod',schema:'N/A',
+    tables:9,kpis:3,dashboards:1,quality:71,
+    syncedAgo:'Failed 2 hrs ago',syncFreq:'Every hour',
+    completeness:78,consistency:72,recency:58,nullRate:12.4,
+    tables_list:[
+      {name:'user_events',rows:'4.8M',cols:10},{name:'page_views',rows:'12.1M',cols:7},
+      {name:'sessions',rows:'2.2M',cols:8},{name:'conversions',rows:'48K',cols:11},
+    ],
+    linked_kpis:['Churn Rate','Active Users','Session Duration'],
+    linked_dashboards:['Customer Health Monitor'],
+    sync_log:[
+      {status:'error',label:'Sync failed — authentication error',meta:'Jun 17, 08:02 AM',rows:'0 rows'},
+      {status:'error',label:'Sync failed — connection refused',meta:'Jun 17, 07:02 AM',rows:'0 rows'},
+      {status:'success',label:'Full sync completed',meta:'Jun 17, 06:00 AM',rows:'4.8M rows'},
+    ]
+  },
+  'csv-1':{
+    name:'Q2 Regional Data',type:'CSV Upload',status:'connected',
+    host:'File upload',port:'—',dbName:'q2_regional_data.csv',schema:'N/A',
+    tables:4,kpis:5,dashboards:2,quality:88,
+    syncedAgo:'Uploaded Jun 12',syncFreq:'Manual upload',
+    completeness:94,consistency:88,recency:82,nullRate:4.2,
+    tables_list:[
+      {name:'north_india',rows:'12,400',cols:6},{name:'south_india',rows:'18,200',cols:6},
+      {name:'west_india',rows:'10,800',cols:6},{name:'east_india',rows:'6,200',cols:6},
+    ],
+    linked_kpis:['Revenue by Region','MoM Revenue','Regional Market Share'],
+    linked_dashboards:['Q2 2025 — Revenue & Growth','Regional Performance'],
+    sync_log:[
+      {status:'success',label:'File processed — auto-schema detected',meta:'Jun 12, 03:14 PM',rows:'47,600 rows'},
+    ]
+  },
+  'api-1':{
+    name:'CRM REST API',type:'REST API',status:'connected',
+    host:'api.crm.company.com',port:'443',dbName:'v2/customers',schema:'JSON',
+    tables:6,kpis:4,dashboards:1,quality:91,
+    syncedAgo:'18 min ago',syncFreq:'Every 30 min',
+    completeness:96,consistency:92,recency:98,nullRate:1.8,
+    tables_list:[
+      {name:'/customers',rows:'48,210',cols:14},{name:'/deals',rows:'12,840',cols:9},
+      {name:'/tickets',rows:'8,210',cols:11},{name:'/nps-responses',rows:'22,400',cols:5},
+    ],
+    linked_kpis:['NPS Score','CAC','Customer LTV','Churn Rate'],
+    linked_dashboards:['Customer Health Monitor'],
+    sync_log:[
+      {status:'success',label:'API poll completed',meta:'Jun 17, 09:43 AM',rows:'124 records updated'},
+      {status:'success',label:'API poll completed',meta:'Jun 17, 09:13 AM',rows:'86 records updated'},
+      {status:'success',label:'API poll completed',meta:'Jun 17, 08:43 AM',rows:'210 records updated'},
+    ]
+  }
+};
+
+const SCHEMA_SAMPLES = {
+  orders:[
+    {col:'order_id',type:'num',null:'0%',pk:true},{col:'customer_id',type:'num',null:'0%',pk:false},
+    {col:'region',type:'text',null:'0%',pk:false},{col:'order_date',type:'date',null:'0.2%',pk:false},
+    {col:'status',type:'text',null:'0%',pk:false},{col:'revenue',type:'num',null:'1.1%',pk:false},
+    {col:'discount',type:'num',null:'8.2%',pk:false},{col:'is_returned',type:'bool',null:'0%',pk:false},
+  ]
+};
+
+let activeDrawerDB = null;
+let activeTab = 'tables';
+let selectedConnector = null;
+let currentSearch = '';
+
+/* ══════════════════════════
+   RAIL
+══════════════════════════ */
+function toggleRail(){
+  const rail = document.getElementById('mainRail');
+  const isExp = rail.classList.toggle('expanded');
+  document.getElementById('collapseIcon').style.transform = isExp ? 'rotate(180deg)' : '';
+}
+
+/* ══════════════════════════
+   DOMAIN NAV
+══════════════════════════ */
+function setDomainStep(el){
+  document.querySelectorAll('.domain-item').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  showToast('info','View: ' + el.textContent.trim());
+}
+
+function handleSearch(val){
+  currentSearch = val.toLowerCase();
+  // In a real app, filter cards. For demo, just toast.
+  if(val) showToast('info','Searching: ' + val);
+}
+
+function setView(type){
+  document.getElementById('gridViewBtn').classList.toggle('active', type === 'grid');
+  document.getElementById('listViewBtn').classList.toggle('active', type === 'list');
+  const grid = document.getElementById('dbGrid');
+  if(type === 'list'){
+    grid.style.gridTemplateColumns = '1fr';
+  } else {
+    grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))';
+  }
+  showToast('info', type === 'grid' ? 'Grid view' : 'List view');
+}
+
+/* ══════════════════════════
+   DRAWER
+══════════════════════════ */
+function openDrawer(id){
+  const db = DB_DATA[id];
+  if(!db) return;
+  activeDrawerDB = db.name;
+
+  document.querySelectorAll('.db-card').forEach(c => c.classList.remove('active-card'));
+  const card = document.getElementById('card-' + id.replace('-','').replace('1','') + '-1') ||
+               document.getElementById('card-' + id);
+  // find the right card by id attribute
+  document.querySelectorAll('.db-card').forEach(c => { if(c.id === 'card-' + id) c.classList.add('active-card'); });
+
+  document.getElementById('drawerName').textContent = db.name;
+  document.getElementById('drawerMeta').textContent = db.type + ' · ' + db.tables + ' tables · Quality ' + db.quality + '%';
+
+  // Update quality panel
+  const qFill = document.getElementById('qualityFill');
+  const qVal = document.getElementById('qualityScoreVal');
+  qFill.style.width = db.quality + '%';
+  qVal.textContent = db.quality + '%';
+  qFill.className = 'quality-fill ' + (db.quality >= 85 ? 'high' : db.quality >= 70 ? 'med' : 'low');
+  document.getElementById('qCompleteness').textContent = db.completeness + '%';
+  document.getElementById('qConsistency').textContent = db.consistency + '%';
+  document.getElementById('qRecency').textContent = db.recency + '%';
+  document.getElementById('qNull').textContent = db.nullRate + '%';
+
+  // Meta grid
+  document.getElementById('drawerMetaGrid').innerHTML = `
+    <div class="drawer-meta-item"><div class="drawer-meta-label">Host</div><div class="drawer-meta-value" style="font-size:11px;word-break:break-all">${db.host}</div></div>
+    <div class="drawer-meta-item"><div class="drawer-meta-label">Port</div><div class="drawer-meta-value">${db.port}</div></div>
+    <div class="drawer-meta-item"><div class="drawer-meta-label">Database</div><div class="drawer-meta-value">${db.dbName}</div></div>
+    <div class="drawer-meta-item"><div class="drawer-meta-label">Sync Freq.</div><div class="drawer-meta-value">${db.syncFreq}</div></div>
+  `;
+
+  // Tables
+  const tlist = document.getElementById('tableList');
+  tlist.innerHTML = (db.tables_list || []).map(t => `
+    <div class="table-row" onclick="showTablePreview('${t.name}')">
+      <div class="tr-icon"><svg width="11" height="11" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+      <div class="tr-info"><div class="tr-name">${t.name}</div><div class="tr-meta">${t.rows} rows · ${t.cols} cols</div></div>
+      <span class="tr-badge">${t.cols} cols</span>
+      <div class="tr-arrow"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+  `).join('');
+
+  // Linked KPIs
+  document.getElementById('linkedKPIs').innerHTML = (db.linked_kpis || []).map(k => `
+    <div class="linked-item" onclick="showToast('info','Opening KPI: ${k}')">
+      <div class="linked-item-icon kpi"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
+      <div class="linked-item-name">${k}</div>
+      <div class="linked-item-meta">Certified</div>
+      <div class="linked-item-arrow"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+  `).join('');
+
+  document.getElementById('linkedDashboards').innerHTML = (db.linked_dashboards || []).map(d => `
+    <div class="linked-item" onclick="showToast('info','Opening dashboard: ${d}')">
+      <div class="linked-item-icon dash"><svg width="13" height="13" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+      <div class="linked-item-name">${d}</div>
+      <div class="linked-item-meta">Active</div>
+      <div class="linked-item-arrow"><svg width="11" height="11" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+  `).join('');
+
+  // Sync log
+  const dotClass = s => s === 'success' ? 'success' : s === 'error' ? 'error' : 'running';
+  document.getElementById('syncLog').innerHTML = (db.sync_log || []).map(e => `
+    <div class="sync-entry">
+      <div class="sync-dot ${dotClass(e.status)}"></div>
+      <div class="sync-entry-info">
+        <div class="sync-entry-label">${e.label}</div>
+        <div class="sync-entry-meta">${e.meta}</div>
+      </div>
+      <div class="sync-entry-rows">${e.rows}</div>
+    </div>
+  `).join('');
+
+  switchTab('tables');
+  document.getElementById('inspectionDrawer').classList.add('open');
+}
+
+function openDrawerById(id){ openDrawer(id); }
+
+function closeDrawer(){
+  document.getElementById('inspectionDrawer').classList.remove('open');
+  document.querySelectorAll('.db-card').forEach(c => c.classList.remove('active-card'));
+  activeDrawerDB = null;
+}
+
+function switchTab(tab){
+  activeTab = tab;
+  ['tables','quality','linked','sync'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).style.display = t === tab ? 'flex' : 'none';
+  });
+  if(tab === 'tables') showTableList();
+}
+
+function showTableList(){
+  document.getElementById('tableListView').style.display = 'block';
+  document.getElementById('tablePreviewView').style.display = 'none';
+}
+
+function showTablePreview(tableName){
+  document.getElementById('previewTableName').textContent = tableName;
+  document.getElementById('tableListView').style.display = 'none';
+  document.getElementById('tablePreviewView').style.display = 'block';
+
+  const cols = SCHEMA_SAMPLES[tableName] || [
+    {col:'id',type:'num',null:'0%',pk:true},{col:'name',type:'text',null:'0.5%',pk:false},
+    {col:'created_at',type:'date',null:'0%',pk:false},{col:'value',type:'num',null:'2.1%',pk:false},
+  ];
+  document.getElementById('schemaTable').innerHTML = `
+    <thead><tr>
+      <th>Column</th><th>Type</th><th>Null Rate</th><th>Primary Key</th>
+    </tr></thead>
+    <tbody>${cols.map(c => `
+      <tr>
+        <td style="font-weight:600;color:var(--text)">${c.col}</td>
+        <td><span class="col-type-pill ${c.type}">${c.type === 'num' ? 'numeric' : c.type === 'bool' ? 'boolean' : c.type}</span></td>
+        <td style="color:${parseFloat(c.null)>5?'var(--red)':parseFloat(c.null)>2?'var(--yellow)':'var(--green)'}">${c.null}</td>
+        <td>${c.pk ? '<span style="color:var(--green);font-weight:700;font-size:11px;">PK</span>' : '<span style="color:var(--text-xdim)">—</span>'}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+}
+
+function syncNowFromDrawer(){
+  syncNow(activeDrawerDB || 'database');
+}
+
+function syncNow(name){
+  showToast('info','Syncing ' + name + '…');
+  setTimeout(() => showToast('success', name + ' synced successfully'), 2000);
+}
+
+function disconnectDB(name){
+  if(!confirm('Disconnect "' + name + '"? This will remove all cached data but KPIs will remain.')) return;
+  showToast('warn', '"' + name + '" disconnected');
+  closeDrawer();
+}
+
+/* ══════════════════════════
+   CONNECT MODAL
+══════════════════════════ */
+function openConnectModal(){
+  selectedConnector = null;
+  document.querySelectorAll('.ct-item').forEach(i => i.classList.remove('selected'));
+  document.getElementById('connectNext1').disabled = true;
+  resetConnectChecks();
+  [1,2,3,4].forEach(n => {
+    const p = document.getElementById('connect-panel-'+n);
+    if(p) p.style.display = 'none';
+  });
+  document.getElementById('connect-panel-1').style.display = 'flex';
+  updateConnectStepUI(1);
+  openModal('connectModal');
+}
+
+function selectConnector(el, name){
+  document.querySelectorAll('.ct-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedConnector = name;
+  document.getElementById('connectNext1').disabled = false;
+  // Auto-fill port hints
+  const portHints = {PostgreSQL:'5432',MySQL:'3306','SQL Server':'1433',Snowflake:'443',BigQuery:'443',Redshift:'5439',MongoDB:'27017','REST API':'443',GraphQL:'443'};
+  document.getElementById('connPort').placeholder = portHints[name] || '5432';
+}
+
+function connectGoStep(step){
+  [1,2,3,4].forEach(n => { document.getElementById('connect-panel-' + n).style.display = 'none'; });
+  document.getElementById('connect-panel-' + step).style.display = 'flex';
+  updateConnectStepUI(step);
+  if(step === 3) runConnectValidation();
+}
+
+function updateConnectStepUI(step){
+  [1,2,3,4].forEach(n => {
+    const el = document.getElementById('ms-' + n);
+    if(!el) return;
+    el.classList.remove('active','done');
+    if(n < step) el.classList.add('done');
+    else if(n === step) el.classList.add('active');
+    const num = el.querySelector('.ms-num');
+    if(n < step) num.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+    else num.textContent = n;
+    const line = document.getElementById('ms-line-' + n);
+    if(line) line.classList.toggle('done', n < step);
+  });
+}
+
+function resetConnectChecks(){
+  document.getElementById('connectAIHint').style.display = 'none';
+  document.getElementById('connectBtn4').disabled = true;
+  const labels = ['Testing connection…','Detecting schema','Running data quality scan','Registering connector'];
+  [1,2,3,4].forEach((n,i) => {
+    const el = document.getElementById('cc-' + n);
+    if(el){
+      el.className = 'vcheck' + (i===0?' loading':'');
+      el.style.opacity = i===0?'1':'0.35';
+      el.innerHTML = i===0
+        ? `<div class="vcheck-icon"><svg class="spin" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.12-6.82" stroke-width="2.5"/></svg></div><div class="vcheck-label">${labels[i]}</div>`
+        : `<div class="vcheck-icon" style="font-size:12px;color:var(--text-dim)">○</div><div class="vcheck-label">${labels[i]}</div>`;
+    }
+  });
+}
+
+function runConnectValidation(){
+  resetConnectChecks();
+  const steps = [
+    {id:'cc-1',label:'Connection established',meta:selectedConnector+' · Latency 12ms',delay:800},
+    {id:'cc-2',label:'Schema detected — 18 tables',meta:'Field types inferred',delay:1600},
+    {id:'cc-3',label:'Data quality scan complete',meta:'Score: 94% · 2.1% null rate',delay:2400},
+    {id:'cc-4',label:'Connector registered',meta:'Ready for KPI generation',delay:3000},
+  ];
+  steps.forEach((s, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(s.id);
+      if(!el) return;
+      el.className = 'vcheck pass';
+      el.style.opacity = '1';
+      el.innerHTML = `<div class="vcheck-icon"><svg width="13" height="13" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="vcheck-label" style="font-weight:600">${s.label}</div><div class="vcheck-meta">${s.meta}</div>`;
+      if(i < steps.length - 1){
+        const nx = document.getElementById(steps[i+1].id);
+        if(nx){
+          nx.className = 'vcheck loading'; nx.style.opacity = '1';
+          nx.innerHTML = `<div class="vcheck-icon"><svg class="spin" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.12-6.82" stroke-width="2.5"/></svg></div><div class="vcheck-label">${steps[i+1].label}…</div>`;
+        }
+      }
+      if(i === steps.length - 1){
+        document.getElementById('connectAIHint').style.display = 'flex';
+        document.getElementById('connectBtn4').disabled = false;
+        const name = document.getElementById('connName').value || (selectedConnector + ' Database');
+        document.getElementById('connectedDbName').textContent = name;
+      }
+    }, s.delay);
+  });
+}
+
+function toggleAuthFields(){
+  const val = document.getElementById('connAuthType').value;
+  document.getElementById('authFields-userpass').style.display = val === 'userpass' ? 'grid' : 'none';
+  document.getElementById('authFields-apikey').style.display = val === 'apikey' ? 'block' : 'none';
+}
+
+/* ══════════════════════════
+   UPLOAD MODAL
+══════════════════════════ */
+function onFileDrop(e){
+  e.preventDefault();
+  document.getElementById('uploadDropZone').classList.remove('dragover');
+  processFile(e.dataTransfer.files[0]);
+}
+function onFileSelect(input){ if(input.files[0]) processFile(input.files[0]); }
+function processFile(f){
+  if(!f) return;
+  document.getElementById('uploadZoneTitle').textContent = f.name + ' ✓';
+  document.getElementById('uploadName').value = f.name.replace(/\.[^.]+$/, '');
+}
+function doUpload(){
+  const name = document.getElementById('uploadName').value.trim();
+  if(!name){ showToast('warn','Enter a dataset name'); return; }
+  document.getElementById('uploadChecks').style.display = 'flex';
+  const checks = ['uc-1','uc-2','uc-3','uc-4'];
+  const labels = ['Parsing file structure…','Detecting schema & types…','Scoring data quality…','Ready to import'];
+  const metas = ['Reading columns and rows','Field types inferred','Score: 88% · 4.2% null rate','4 sheets detected'];
+  checks.forEach((id, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.className = 'vcheck pass'; el.style.opacity = '1';
+      el.innerHTML = `<div class="vcheck-icon"><svg width="13" height="13" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="vcheck-label" style="font-weight:600">${labels[i]}</div><div class="vcheck-meta">${metas[i]}</div>`;
+      if(i === checks.length - 1){
+        setTimeout(() => {
+          closeModal('uploadModal');
+          showToast('success', '"' + name + '" uploaded and processed — KPI Agent is running');
+        }, 500);
+      }
+    }, (i + 1) * 700);
+  });
+}
+
+/* ══════════════════════════
+   MODALS
+══════════════════════════ */
+function openModal(id){ document.getElementById(id).classList.add('visible'); }
+function closeModal(id){ document.getElementById(id).classList.remove('visible'); }
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('visible'); });
+});
+
+/* ══════════════════════════
+   TOAST
+══════════════════════════ */
+let toastTimer;
+const toastIcons = {
+  success:'<svg width="10" height="10" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+  info:'<svg width="10" height="10" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>',
+  warn:'<svg width="10" height="10" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+};
+function showToast(type, msg){
+  const t = document.getElementById('toast'), icon = document.getElementById('toastIcon');
+  icon.className = 'toast-icon ' + type;
+  icon.innerHTML = toastIcons[type] || toastIcons.info;
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('visible'), 3000);
+}
+</script>
+</body>
+</html>
