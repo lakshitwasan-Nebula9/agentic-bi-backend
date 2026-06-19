@@ -94,6 +94,67 @@ def test_connection(connector: DataConnector, password: str | None = None) -> tu
     return True, "Connection successful"
 
 
+def test_connection_raw(
+    host: str,
+    port: int,
+    database_name: str,
+    username: str,
+    password: str,
+) -> tuple[bool, str]:
+    """Test a connection without a saved connector record."""
+    try:
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            dbname=database_name,
+            user=username,
+            password=password,
+            connect_timeout=CONNECT_TIMEOUT_SECONDS,
+        )
+        conn.close()
+    except psycopg2.OperationalError as exc:
+        return False, str(exc).strip()
+    return True, "Connection successful"
+
+
+def list_tables(connector: DataConnector) -> list[dict[str, Any]]:
+    """Return public tables from the source DB with approximate row counts."""
+    rows = extract_rows(
+        connector,
+        """
+        SELECT
+            t.table_name,
+            t.table_type,
+            s.n_live_tup AS row_estimate
+        FROM information_schema.tables t
+        LEFT JOIN pg_stat_user_tables s ON s.relname = t.table_name
+        WHERE t.table_schema = 'public'
+        ORDER BY t.table_name
+        """,
+    )
+    return rows
+
+
+def get_table_schema(connector: DataConnector, table_name: str) -> list[dict[str, Any]]:
+    """Return column definitions for a single table in the source DB."""
+    rows = extract_rows(
+        connector,
+        """
+        SELECT
+            column_name,
+            data_type,
+            is_nullable,
+            column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %(table_name)s
+        ORDER BY ordinal_position
+        """,
+        {"table_name": table_name},
+    )
+    return rows
+
+
 def extract_rows(
     connector: DataConnector, query: str, params: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
