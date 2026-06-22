@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import uuid
+from contextlib import nullcontext
 
 from fastapi import HTTPException
 from google.adk.agents import Agent
@@ -30,6 +31,7 @@ from app.prompts import load_prompt
 from app.schemas.kpi import KPICreate
 from app.services.embedding_service import upsert_embedding
 from app.services.kpi_calculation_service import compute_and_snapshot
+from app.services.langfuse_service import get_langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -97,58 +99,97 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
 
     prompt = _build_prompt(schema_meta)
 
-    session = await _session_service.create_session(app_name="kpi_generation", user_id="system")
-    message = types.Content(role="user", parts=[types.Part(text=prompt)])
-
-    response_text = ""
-    async for event in _runner.run_async(
-        user_id="system", session_id=session.id, new_message=message
-    ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response_text = event.content.parts[0].text
-
-    try:
-        llm_output = _KPILLMOutput.model_validate_json(response_text)
-    except Exception as err:
-        raise HTTPException(
-            status_code=502, detail="LLM returned an unparseable KPI response"
-        ) from err
-
-    kpi_ids: list[uuid.UUID] = []
-    for raw in llm_output.kpis:
-        kpi_create = KPICreate(
-            dataset_id=dataset_id,
-            table_name=lookup_name,
-            name=raw.name,
-            display_name=raw.display_name,
-            description=raw.description,
-            category=raw.category,
-            formula=raw.formula,
-            sql_expression=raw.sql_expression,
-            unit=raw.unit,
-            direction=raw.direction,
-            suggested_chart_type=raw.suggested_chart_type,
+    lf = get_langfuse()
+    trace_cm = (
+        lf.start_as_current_observation(
+            as_type="trace",
+            name="kpi_generation",
+            metadata={"dataset_id": str(dataset_id), "table_name": lookup_name},
         )
-        kpi = create_kpi(db, kpi_create)
+        if lf
+        else nullcontext()
+    )
+
+    with trace_cm as lf_trace:
+        gen_cm = (
+            lf.start_as_current_observation(
+                as_type="generation",
+                name="gemini_kpi_generation",
+                model=settings.GEMINI_LLM_MODEL,
+            )
+            if lf
+            else nullcontext()
+        )
+        with gen_cm as lf_gen:
+            if lf_gen:
+                lf_gen.update(input=prompt)
+
+            session = await _session_service.create_session(
+                app_name="kpi_generation", user_id="system"
+            )
+            message = types.Content(role="user", parts=[types.Part(text=prompt)])
+
+            response_text = ""
+            async for event in _runner.run_async(
+                user_id="system", session_id=session.id, new_message=message
+            ):
+                if event.is_final_response() and event.content and event.content.parts:
+                    response_text = event.content.parts[0].text
+
+            if lf_gen:
+                lf_gen.update(output=response_text)
 
         try:
-            compute_and_snapshot(db, kpi)
-        except Exception:
-            logger.warning(
-                "Snapshot failed for KPI %s (%s) — continuing", kpi.id, kpi.name, exc_info=True
+            llm_output = _KPILLMOutput.model_validate_json(response_text)
+        except Exception as err:
+            if lf_trace:
+                lf_trace.update(
+                    level="ERROR", status_message="LLM returned unparseable KPI response"
+                )
+            raise HTTPException(
+                status_code=502, detail="LLM returned an unparseable KPI response"
+            ) from err
+
+        kpi_ids: list[uuid.UUID] = []
+        for raw in llm_output.kpis:
+            kpi_create = KPICreate(
+                dataset_id=dataset_id,
+                table_name=lookup_name,
+                name=raw.name,
+                display_name=raw.display_name,
+                description=raw.description,
+                category=raw.category,
+                formula=raw.formula,
+                sql_expression=raw.sql_expression,
+                unit=raw.unit,
+                direction=raw.direction,
+                suggested_chart_type=raw.suggested_chart_type,
             )
-            db.rollback()
+            kpi = create_kpi(db, kpi_create)
 
-        embed_text = (
-            f"KPI: {kpi.display_name}\n"
-            f"Description: {kpi.description}\n"
-            f"Category: {kpi.category}\n"
-            f"Formula: {kpi.formula}\n"
-            f"Direction: {kpi.direction}"
-        )
-        upsert_embedding(db, "kpi_definition", str(kpi.id), embed_text)
+            try:
+                compute_and_snapshot(db, kpi)
+            except Exception:
+                logger.warning(
+                    "Snapshot failed for KPI %s (%s) — continuing", kpi.id, kpi.name, exc_info=True
+                )
+                db.rollback()
 
-        kpi_ids.append(kpi.id)
+            embed_text = (
+                f"KPI: {kpi.display_name}\n"
+                f"Description: {kpi.description}\n"
+                f"Category: {kpi.category}\n"
+                f"Formula: {kpi.formula}\n"
+                f"Direction: {kpi.direction}"
+            )
+            upsert_embedding(db, "kpi_definition", str(kpi.id), embed_text)
+
+            kpi_ids.append(kpi.id)
+
+        if lf_trace:
+            lf_trace.update(
+                output={"kpi_count": len(kpi_ids), "kpi_ids": [str(k) for k in kpi_ids]}
+            )
 
     logger.info("Generated %d KPIs for dataset %s", len(kpi_ids), dataset_id)
     return kpi_ids
