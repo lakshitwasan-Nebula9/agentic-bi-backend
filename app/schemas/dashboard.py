@@ -50,11 +50,13 @@ class WidgetResponse(BaseModel):
 
 class DashboardCreate(BaseModel):
     name: str
+    description: str | None = None
     is_default: bool = False
 
 
 class DashboardUpdate(BaseModel):
     name: str | None = None
+    description: str | None = None
     is_default: bool | None = None
 
 
@@ -62,6 +64,7 @@ class DashboardResponse(BaseModel):
     id: uuid.UUID
     owner_id: uuid.UUID
     name: str
+    description: str | None
     is_default: bool
     created_at: datetime
     updated_at: datetime
