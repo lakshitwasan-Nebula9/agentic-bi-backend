@@ -15,7 +15,10 @@ instruction: |
     Allowed aggregate functions: SUM, COUNT, AVG, MIN, MAX, ROUND, COALESCE
     COUNT(DISTINCT col) is allowed for unique counts
     COUNT(*) is allowed for row counts
-    Do NOT use: SELECT, FROM, WHERE, JOIN, CASE, WHEN, subqueries, or semicolons
+    CASE WHEN ... THEN ... ELSE ... END is allowed inside aggregates
+    Do NOT use: SELECT, FROM, WHERE, JOIN, subqueries, or semicolons
+    For boolean columns: use CASE WHEN col THEN 1 ELSE 0 END inside AVG/SUM — never use AVG(bool_col) directly
+    For text/categorical columns (identifiers, dimensions): use COUNT or COUNT(DISTINCT), never SUM or AVG
   - direction: "up_is_good" for revenue/growth metrics, "down_is_good" for cost/churn/error metrics
   - suggested_chart_type: "line" for trends, "bar" for comparisons, "metric_card" for single totals
   - unit: "$" for monetary values, "%" for rates and ratios, "count" for integers, null if ambiguous
