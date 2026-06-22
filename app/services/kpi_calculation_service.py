@@ -25,14 +25,19 @@ logger = logging.getLogger(__name__)
 
 _FORBIDDEN = re.compile(
     r"\b(SELECT|FROM|WHERE|JOIN|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|"
-    r"TRUNCATE|EXEC|EXECUTE|UNION|CASE|WHEN)\b|;",
+    r"TRUNCATE|EXEC|EXECUTE|UNION)\b|;",
     re.IGNORECASE,
 )
 
 _ALLOWED_AGGREGATE_PREFIX = re.compile(
-    r"^\s*(SUM|COUNT|AVG|MIN|MAX|ROUND|COALESCE)\s*\(",
+    r"^\s*(SUM|COUNT|AVG|MIN|MAX|ROUND|COALESCE|CASE)\s*[\s(]",
     re.IGNORECASE,
 )
+
+# Python type names from schema_fingerprint that map to numeric
+_NUMERIC_TYPES = {"int", "float", "Decimal", "complex"}
+_BOOL_TYPES = {"bool"}
+_TEXT_TYPES = {"str"}
 
 
 def validate_sql_expression(sql_expression: str) -> None:
@@ -49,16 +54,54 @@ def validate_sql_expression(sql_expression: str) -> None:
         )
 
 
-def _substitute_columns(sql_expression: str, column_names: list[str]) -> str:
-    """Replace bare column name references with JSONB accessors."""
+def _jsonb_accessor(col: str, py_type: str) -> str:
+    """Return the correct JSONB accessor for a column given its Python type name."""
+    if py_type in _BOOL_TYPES:
+        # Cast to boolean so CASE WHEN col = TRUE / CASE WHEN col both work.
+        # AVG/SUM on ::boolean is invalid in PG — fixed by _fix_bool_aggregates() below.
+        return f"(t.row_data->>'{col}')::boolean"
+    if py_type in _NUMERIC_TYPES:
+        return f"(t.row_data->>'{col}')::numeric"
+    # Text, identifiers, dimensions, ISO-string datetimes — raw text; COUNT works fine
+    return f"(t.row_data->>'{col}')"
+
+
+def _fix_bool_aggregates(expr: str) -> str:
+    """PostgreSQL has no AVG/SUM for boolean. Cast ::boolean to ::int where needed."""
+    return re.sub(
+        r"\b(AVG|SUM)\s*\(([^()]*::boolean)\)",
+        lambda m: f"{m.group(1)}(({m.group(2)})::int)",
+        expr,
+        flags=re.IGNORECASE,
+    )
+
+
+def _substitute_columns(
+    sql_expression: str,
+    column_names: list[str],
+    column_types: dict[str, str] | None = None,
+) -> str:
+    """Replace bare column name references with type-aware JSONB accessors."""
     parts = re.split(r"\s+AS\s+", sql_expression, maxsplit=1, flags=re.IGNORECASE)
     expr = parts[0]
     alias = (" AS " + parts[1]) if len(parts) > 1 else ""
 
     for col in sorted(column_names, key=len, reverse=True):
+        py_type = (column_types or {}).get(col, "")
+        accessor = _jsonb_accessor(col, py_type)
         pattern = r"\b" + re.escape(col) + r"\b"
-        jsonb_ref = f"(t.row_data->>'{col}')::numeric"
-        expr = re.sub(pattern, jsonb_ref, expr)
+        expr = re.sub(pattern, accessor, expr)
+
+    # Fix AVG/SUM on ::boolean (PG has no boolean aggregate) → cast to int
+    expr = _fix_bool_aggregates(expr)
+
+    # PostgreSQL ROUND(x, n) requires x::numeric — wrap first arg defensively
+    expr = re.sub(
+        r"\bROUND\s*\((.+?),\s*(\d+)\)",
+        lambda m: f"ROUND(({m.group(1)})::numeric, {m.group(2)})",
+        expr,
+        flags=re.IGNORECASE,
+    )
 
     return expr + alias
 
@@ -80,7 +123,15 @@ def compute_and_snapshot(
     if schema_meta and schema_meta.columns:
         column_names = [col["name"] for col in schema_meta.columns if isinstance(col, dict)]
 
-    substituted = _substitute_columns(kpi.sql_expression, column_names)
+    # Fetch column types from the dataset's schema_fingerprint for type-aware casting
+    column_types: dict[str, str] = {}
+    from app.crud.dataset import get_dataset
+
+    dataset = get_dataset(db, kpi.dataset_id)
+    if dataset and dataset.schema_fingerprint:
+        column_types = dataset.schema_fingerprint  # {col_name: python_type_name}
+
+    substituted = _substitute_columns(kpi.sql_expression, column_names, column_types)
     sql = (
         f"SELECT {substituted} FROM "
         "(SELECT row_data FROM dataset_records WHERE dataset_id = :dataset_id) AS t"
@@ -109,11 +160,7 @@ def recompute_snapshot(
     period_start: datetime | None = None,
     period_end: datetime | None = None,
 ) -> KPISnapshot:
-    """Recompute a KPI snapshot on demand — called when the underlying dataset is refreshed.
-
-    This is a placeholder path wired in for Sprint 4/5 dataset refresh triggers.
-    Resolves the KPIDefinition internally and delegates to compute_and_snapshot.
-    """
+    """Recompute a KPI snapshot on demand — called when the underlying dataset is refreshed."""
     from app.crud.kpi import get_kpi
 
     kpi = get_kpi(db, kpi_id)
