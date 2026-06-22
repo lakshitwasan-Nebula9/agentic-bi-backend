@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import nullcontext
 
 from fastapi import HTTPException
 from google.adk.agents import Agent
@@ -18,6 +19,7 @@ from app.schemas.schema_detection import (
     SchemaDetectResponse,
 )
 from app.services.embedding_service import upsert_embedding
+from app.services.langfuse_service import get_langfuse
 
 
 class _SchemaLLMOutput(BaseModel):
@@ -92,22 +94,58 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
     9. Return ONLY valid JSON.
     """
 
-    session = await _session_service.create_session(app_name="schema_detection", user_id="system")
-    message = types.Content(role="user", parts=[types.Part(text=prompt)])
+    lf = get_langfuse()
+    trace_cm = (
+        lf.start_as_current_observation(
+            as_type="trace",
+            name="schema_detection",
+            metadata={"table_name": request.table_name},
+        )
+        if lf
+        else nullcontext()
+    )
 
-    response_text = ""
-    async for event in _runner.run_async(
-        user_id="system", session_id=session.id, new_message=message
-    ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response_text = event.content.parts[0].text
+    with trace_cm as lf_trace:
+        gen_cm = (
+            lf.start_as_current_observation(
+                as_type="generation",
+                name="gemini_schema_detection",
+                model=settings.GEMINI_LLM_MODEL,
+            )
+            if lf
+            else nullcontext()
+        )
+        with gen_cm as lf_gen:
+            if lf_gen:
+                lf_gen.update(input=prompt)
 
-    try:
-        result = _SchemaLLMOutput.model_validate_json(response_text)
-    except Exception as err:
-        raise HTTPException(status_code=502, detail="LLM returned an unparseable response") from err
+            session = await _session_service.create_session(
+                app_name="schema_detection", user_id="system"
+            )
+            message = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-    embed_content = f"""
+            response_text = ""
+            async for event in _runner.run_async(
+                user_id="system", session_id=session.id, new_message=message
+            ):
+                if event.is_final_response() and event.content and event.content.parts:
+                    response_text = event.content.parts[0].text
+
+            if lf_gen:
+                lf_gen.update(output=response_text)
+
+        try:
+            result = _SchemaLLMOutput.model_validate_json(response_text)
+        except Exception as err:
+            if lf_trace:
+                lf_trace.update(
+                    level="ERROR", status_message="LLM returned unparseable schema response"
+                )
+            raise HTTPException(
+                status_code=502, detail="LLM returned an unparseable response"
+            ) from err
+
+        embed_content = f"""
         Table Name:
         {request.table_name}
 
@@ -138,21 +176,30 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
         Column Definitions:
         {' '.join(c.business_definition for c in result.columns)}
         """
-    record = upsert_embedding(db, "schema_description", request.table_name, embed_content)
+        record = upsert_embedding(db, "schema_description", request.table_name, embed_content)
 
-    schema_meta = upsert_schema_metadata(
-        db,
-        table_name=request.table_name,
-        entity_type=result.entity_type,
-        description=result.description,
-        columns=result.columns,
-        identifiers=result.identifiers,
-        dimensions=result.dimensions,
-        measures=result.measures,
-        date_columns=result.date_columns,
-        suggested_kpis=result.suggested_kpis,
-        business_questions=result.business_questions,
-    )
+        schema_meta = upsert_schema_metadata(
+            db,
+            table_name=request.table_name,
+            entity_type=result.entity_type,
+            description=result.description,
+            columns=result.columns,
+            identifiers=result.identifiers,
+            dimensions=result.dimensions,
+            measures=result.measures,
+            date_columns=result.date_columns,
+            suggested_kpis=result.suggested_kpis,
+            business_questions=result.business_questions,
+        )
+
+        if lf_trace:
+            lf_trace.update(
+                output={
+                    "entity_type": result.entity_type,
+                    "column_count": len(result.columns),
+                    "suggested_kpi_count": len(result.suggested_kpis),
+                }
+            )
 
     return SchemaDetectResponse(
         table_name=request.table_name,
