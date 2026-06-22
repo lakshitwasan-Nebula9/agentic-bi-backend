@@ -14,6 +14,7 @@ def _make_dataset(name: str = "orders") -> MagicMock:
     dataset = MagicMock()
     dataset.id = uuid.uuid4()
     dataset.name = name
+    dataset.source_query = f"SELECT * FROM {name}"
     return dataset
 
 
