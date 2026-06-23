@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.crud import connector as connector_crud
 from app.models.connector import DataConnector
 from app.models.dataset import Dataset
-from app.models.kpi import KPIDefinition
+from app.models.kpi import KPIDefinition, KPISnapshot
 from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.encryption_service import decrypt_value, encrypt_value
 
@@ -70,6 +70,32 @@ def update_connector(
 
 def delete_connector(db: Session, connector_id: uuid.UUID) -> None:
     connector = get_connector_or_404(db, connector_id)
+
+    dataset_ids = [
+        row[0] for row in db.query(Dataset.id).filter(Dataset.connector_id == connector_id).all()
+    ]
+    if dataset_ids:
+        kpi_ids = [
+            row[0]
+            for row in db.query(KPIDefinition.id)
+            .filter(KPIDefinition.dataset_id.in_(dataset_ids))
+            .all()
+        ]
+        if kpi_ids:
+            db.query(KPISnapshot).filter(KPISnapshot.kpi_id.in_(kpi_ids)).delete(
+                synchronize_session=False
+            )
+        db.query(KPISnapshot).filter(KPISnapshot.dataset_id.in_(dataset_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(KPIDefinition).filter(KPIDefinition.dataset_id.in_(dataset_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Dataset).filter(Dataset.connector_id == connector_id).delete(
+            synchronize_session=False
+        )
+        db.flush()
+
     connector_crud.delete_connector(db, connector)
 
 

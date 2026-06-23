@@ -96,4 +96,7 @@ class KPIResponse(BaseModel):
     # Display-only fields populated by the service layer
     current_value: float | None = None
     mom_change_pct: float | None = None
+    yoy_change_pct: float | None = None
+    qoq_change_pct: float | None = None
+    ytd_value: float | None = None
     data_source_name: str | None = None
