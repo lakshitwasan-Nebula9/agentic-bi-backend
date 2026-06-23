@@ -11,7 +11,7 @@ can trigger a new snapshot without re-running the KPI Agent.
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -209,7 +209,7 @@ def compute_monthly_snapshots(
     snapshots: list[KPISnapshot] = []
     for (month_start,) in month_rows:
         if month_start.tzinfo is None:
-            month_start = month_start.replace(tzinfo=timezone.utc)
+            month_start = month_start.replace(tzinfo=UTC)
 
         if month_start in existing_period_starts:
             continue
@@ -244,9 +244,7 @@ def compute_monthly_snapshots(
                 },
             ).scalar()
         except Exception as exc:
-            logger.warning(
-                "Monthly KPI SQL failed for %s period %s: %s", kpi.id, month_start, exc
-            )
+            logger.warning("Monthly KPI SQL failed for %s period %s: %s", kpi.id, month_start, exc)
             continue
 
         if result is None:

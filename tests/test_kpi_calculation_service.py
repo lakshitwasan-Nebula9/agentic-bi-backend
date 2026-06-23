@@ -4,8 +4,8 @@ All DB calls are mocked; no real Postgres required.
 """
 
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, call, patch
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -35,9 +35,9 @@ def _make_schema_meta(date_columns: list[str] | None = None) -> MagicMock:
     return meta
 
 
-JAN = datetime(2026, 1, 1, tzinfo=timezone.utc)
-FEB = datetime(2026, 2, 1, tzinfo=timezone.utc)
-MAR = datetime(2026, 3, 1, tzinfo=timezone.utc)
+JAN = datetime(2026, 1, 1, tzinfo=UTC)
+FEB = datetime(2026, 2, 1, tzinfo=UTC)
+MAR = datetime(2026, 3, 1, tzinfo=UTC)
 
 SUBSTITUTED = "SUM((t.row_data->>'total_amount')::numeric) AS total_revenue"
 
@@ -203,7 +203,7 @@ def test_monthly_snapshots_december_wraps_to_january():
     """December period_end must wrap to Jan 1 of next year minus 1 microsecond."""
     from datetime import timedelta
 
-    dec = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    dec = datetime(2026, 12, 1, tzinfo=UTC)
     db = MagicMock()
     kpi = _make_kpi()
     _setup_db_for_monthly(db, [(dec,)], [], [999.0])
@@ -236,7 +236,7 @@ def test_monthly_snapshots_december_wraps_to_january():
         compute_monthly_snapshots(db, kpi, "created_at")
 
     _, period_end = captured[0]
-    jan_next = datetime(2027, 1, 1, tzinfo=timezone.utc)
+    jan_next = datetime(2027, 1, 1, tzinfo=UTC)
     assert period_end == jan_next - timedelta(microseconds=1)
 
 
@@ -339,9 +339,7 @@ def test_snapshot_kpi_falls_back_to_full_dataset_when_no_date_columns():
             "app.services.kpi_calculation_service.get_schema_metadata_by_table",
             return_value=schema_meta,
         ),
-        patch(
-            "app.services.kpi_calculation_service.compute_monthly_snapshots"
-        ) as mock_monthly,
+        patch("app.services.kpi_calculation_service.compute_monthly_snapshots") as mock_monthly,
         patch(
             "app.services.kpi_calculation_service.compute_and_snapshot",
             return_value=fake_snap,

@@ -174,7 +174,9 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
                 create_kpi_approval(db, kpi.id)
             except Exception:
                 logger.warning(
-                    "Approval request creation failed for KPI %s — continuing", kpi.id, exc_info=True
+                    "Approval request creation failed for KPI %s — continuing",
+                    kpi.id,
+                    exc_info=True,
                 )
 
             try:
@@ -332,9 +334,7 @@ class KPIAgent(AgentSubscriber):
                 "count": len(kpi_ids),
             },
         )
-        logger.info(
-            "Published kpis_recomputed for dataset %s (%d KPIs)", dataset_id, len(kpi_ids)
-        )
+        logger.info("Published kpis_recomputed for dataset %s (%d KPIs)", dataset_id, len(kpi_ids))
 
 
 if __name__ == "__main__":
