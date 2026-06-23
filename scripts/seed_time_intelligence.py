@@ -17,7 +17,7 @@ Requires local Postgres on localhost:5432 (same credentials as seed_demo_db.py).
 """
 
 import random
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import psycopg2
 
@@ -27,7 +27,7 @@ DSN = "postgresql://user:password@localhost:5432/agentic_bi"
 START = datetime(2025, 4, 1, tzinfo=UTC)
 END = datetime(2026, 5, 31, 23, 59, 59, tzinfo=UTC)
 
-ORDERS_PER_MONTH = 300   # ~300 orders/month → enough signal per monthly bucket
+ORDERS_PER_MONTH = 300  # ~300 orders/month → enough signal per monthly bucket
 random.seed(99)
 
 
@@ -56,7 +56,7 @@ def build_orders(month_start: datetime, month_end: datetime, id_offset: int) -> 
     # Seasonal multiplier: Q4 (Oct–Dec) gets a boost, Q1 slightly slower
     month = month_start.month
     if month in (11, 12):
-        volume_mult = random.uniform(1.3, 1.5)   # holiday spike
+        volume_mult = random.uniform(1.3, 1.5)  # holiday spike
     elif month in (1, 2):
         volume_mult = random.uniform(0.8, 0.95)  # post-holiday dip
     elif month in (6, 7, 8):
@@ -69,7 +69,9 @@ def build_orders(month_start: datetime, month_end: datetime, id_offset: int) -> 
     for i in range(count):
         order_id = id_offset + i
         customer_id = random.randint(1000, 9999)
-        item_count = random.choices([1, 2, 3, 4, 5, 6, 7, 8], weights=[30, 25, 20, 12, 7, 3, 2, 1])[0]
+        item_count = random.choices([1, 2, 3, 4, 5, 6, 7, 8], weights=[30, 25, 20, 12, 7, 3, 2, 1])[
+            0
+        ]
         base_price = random.uniform(40, 200) * item_count
         discount_pct = random.choices([0, 0.05, 0.10, 0.15, 0.20], weights=[40, 20, 20, 12, 8])[0]
         discount_amount = round(base_price * discount_pct, 2)
@@ -135,11 +137,17 @@ def main() -> None:
         conn.close()
 
     print()
-    print(f"Done. Inserted {total_rows:,} orders across {len(months)} months ({START:%b %Y} – {END:%b %Y}).")
+    print(
+        f"Done. Inserted {total_rows:,} orders across {len(months)} months ({START:%b %Y} – {END:%b %Y})."
+    )
     print()
     print("Next steps:")
-    print("  1. Re-sync the orders dataset in the app  →  POST /api/v1/datasets/{orders_dataset_id}/sync")
-    print("  2. Recompute KPIs                          →  POST /api/v1/kpis/{kpi_id}/recompute  (repeat per KPI)")
+    print(
+        "  1. Re-sync the orders dataset in the app  →  POST /api/v1/datasets/{orders_dataset_id}/sync"
+    )
+    print(
+        "  2. Recompute KPIs                          →  POST /api/v1/kpis/{kpi_id}/recompute  (repeat per KPI)"
+    )
     print("  3. Call GET /api/v1/kpis to see yoy_change_pct, qoq_change_pct, ytd_value")
 
 
