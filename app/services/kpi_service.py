@@ -35,11 +35,12 @@ def _enrich(db: Session, kpis: list[KPIDefinition]) -> list[KPIResponse]:
     kpi_ids = [k.id for k in kpis]
     dataset_ids = list({k.dataset_id for k in kpis})
 
-    # Latest 2 snapshots per KPI (one query, all KPIs)
+    # Latest 2 snapshots per KPI ordered by period_start (monthly snapshots),
+    # falling back to computed_at for full-dataset snapshots where period_start is NULL.
     all_snapshots: list[KPISnapshot] = (
         db.query(KPISnapshot)
         .filter(KPISnapshot.kpi_id.in_(kpi_ids))
-        .order_by(KPISnapshot.computed_at.desc())
+        .order_by(KPISnapshot.period_start.desc().nulls_last(), KPISnapshot.computed_at.desc())
         .all()
     )
     # Group by kpi_id, keep first two
@@ -129,7 +130,7 @@ def delete_kpi(db: Session, kpi_id: uuid.UUID) -> None:
 def create_manual_kpi(db: Session, req: KPIManualCreate) -> KPIDefinition:
     """Create a KPI from the 'Add New KPI' form. Returns the ORM object so the router can create an AR."""
     from app.schemas.kpi import KPICreate
-    from app.services.kpi_calculation_service import compute_and_snapshot
+    from app.services.kpi_calculation_service import snapshot_kpi
 
     dataset = db.get(Dataset, req.dataset_id)
     if dataset is None:
@@ -143,12 +144,12 @@ def create_manual_kpi(db: Session, req: KPIManualCreate) -> KPIDefinition:
         category=req.category,
         formula=req.sql_expression,
         sql_expression=req.sql_expression,
-        direction="up",
+        direction="up_is_good",
         owner_name=req.owner_name,
     )
     kpi = kpi_crud.create_kpi(db, kpi_create)
     try:
-        compute_and_snapshot(db, kpi)
+        snapshot_kpi(db, kpi)
     except Exception:
         logger.warning("Snapshot failed for manual KPI %s (%s)", kpi.id, kpi.name, exc_info=True)
     return kpi

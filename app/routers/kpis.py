@@ -94,3 +94,14 @@ async def generate_kpis(dataset_id: uuid.UUID, db: Session = Depends(get_db)):
     from app.agents.kpi_agent import generate_kpis_for_dataset
 
     return await generate_kpis_for_dataset(db, dataset_id)
+
+
+@router.post("/datasets/{dataset_id}/kpis/recompute", response_model=list[uuid.UUID])
+def recompute_kpis(dataset_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Recompute snapshots for all certified KPIs of a dataset.
+
+    Called when the dataset is re-synced. Does not regenerate KPI definitions.
+    """
+    from app.agents.kpi_agent import recompute_kpis_for_dataset
+
+    return recompute_kpis_for_dataset(db, dataset_id)

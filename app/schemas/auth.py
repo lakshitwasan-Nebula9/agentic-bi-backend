@@ -30,6 +30,7 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: EmailStr
+    name: str | None
     role: UserRole
     is_admin: bool
     is_active: bool

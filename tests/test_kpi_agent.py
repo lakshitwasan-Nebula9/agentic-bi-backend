@@ -63,7 +63,7 @@ async def test_generate_kpis_returns_structured_list():
         patch("app.agents.kpi_agent.get_dataset", return_value=dataset),
         patch("app.agents.kpi_agent.get_schema_metadata_by_table", return_value=schema_meta),
         patch("app.agents.kpi_agent.create_kpi", return_value=created_kpi),
-        patch("app.agents.kpi_agent.compute_and_snapshot"),
+        patch("app.agents.kpi_agent.snapshot_kpi"),
         patch("app.agents.kpi_agent.upsert_embedding"),
         patch("app.agents.kpi_agent._runner") as mock_runner,
         patch("app.agents.kpi_agent.settings") as mock_settings,
@@ -103,7 +103,7 @@ async def test_generate_kpis_embeds_each_kpi():
         patch("app.agents.kpi_agent.get_dataset", return_value=dataset),
         patch("app.agents.kpi_agent.get_schema_metadata_by_table", return_value=schema_meta),
         patch("app.agents.kpi_agent.create_kpi", return_value=created_kpi),
-        patch("app.agents.kpi_agent.compute_and_snapshot"),
+        patch("app.agents.kpi_agent.snapshot_kpi"),
         patch("app.agents.kpi_agent.upsert_embedding") as mock_embed,
         patch("app.agents.kpi_agent._runner") as mock_runner,
         patch("app.agents.kpi_agent.settings") as mock_settings,
@@ -156,3 +156,96 @@ async def test_generate_kpis_raises_503_when_no_api_key():
             await generate_kpis_for_dataset(db, dataset.id)
 
     assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_generate_kpis_creates_approval_request_per_kpi():
+    """Every AI-generated KPI must receive an ApprovalRequest immediately."""
+    db = MagicMock()
+    dataset = _make_dataset()
+    schema_meta = _make_schema_meta()
+    created_kpi = MagicMock()
+    created_kpi.id = uuid.uuid4()
+    created_kpi.name = "total_revenue"
+    created_kpi.display_name = "Total Revenue"
+    created_kpi.description = "Sum of all order amounts"
+    created_kpi.category = "revenue"
+    created_kpi.formula = "SUM(total_amount)"
+    created_kpi.direction = "up_is_good"
+
+    final_event = MagicMock()
+    final_event.is_final_response.return_value = True
+    final_event.content.parts = [MagicMock(text=LLM_JSON)]
+
+    async def fake_run_async(**kwargs):
+        yield final_event
+
+    with (
+        patch("app.agents.kpi_agent.get_dataset", return_value=dataset),
+        patch("app.agents.kpi_agent.get_schema_metadata_by_table", return_value=schema_meta),
+        patch("app.agents.kpi_agent.create_kpi", return_value=created_kpi),
+        patch("app.agents.kpi_agent.create_kpi_approval") as mock_approval,
+        patch("app.agents.kpi_agent.snapshot_kpi"),
+        patch("app.agents.kpi_agent.upsert_embedding"),
+        patch("app.agents.kpi_agent._runner") as mock_runner,
+        patch("app.agents.kpi_agent.settings") as mock_settings,
+    ):
+        mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_LLM_MODEL = "gemini-2.0-flash"
+        mock_runner.run_async = fake_run_async
+
+        await generate_kpis_for_dataset(db, dataset.id)
+
+    mock_approval.assert_called_once_with(db, created_kpi.id)
+
+
+def test_recompute_kpis_for_dataset_only_processes_certified_kpis():
+    """recompute_kpis_for_dataset recomputes snapshots for certified KPIs only."""
+    from app.agents.kpi_agent import recompute_kpis_for_dataset
+
+    db = MagicMock()
+    dataset_id = uuid.uuid4()
+
+    certified_kpi = MagicMock()
+    certified_kpi.id = uuid.uuid4()
+
+    with (
+        patch("app.agents.kpi_agent.list_kpis", return_value=[certified_kpi]) as mock_list,
+        patch("app.agents.kpi_agent.snapshot_kpi") as mock_snap,
+    ):
+        result = recompute_kpis_for_dataset(db, dataset_id)
+
+    mock_list.assert_called_once_with(db, dataset_id=dataset_id, status="certified")
+    mock_snap.assert_called_once_with(db, certified_kpi)
+    assert result == [certified_kpi.id]
+
+
+def test_recompute_kpis_skips_failed_kpi_and_continues():
+    """A snapshot failure for one KPI must not abort recomputation of the rest."""
+    from app.agents.kpi_agent import recompute_kpis_for_dataset
+
+    db = MagicMock()
+    dataset_id = uuid.uuid4()
+
+    kpi_ok = MagicMock()
+    kpi_ok.id = uuid.uuid4()
+    kpi_fail = MagicMock()
+    kpi_fail.id = uuid.uuid4()
+
+    call_count = 0
+
+    def snap_side_effect(db, kpi):
+        nonlocal call_count
+        call_count += 1
+        if kpi is kpi_fail:
+            raise RuntimeError("SQL error")
+
+    with (
+        patch("app.agents.kpi_agent.list_kpis", return_value=[kpi_ok, kpi_fail]),
+        patch("app.agents.kpi_agent.snapshot_kpi", side_effect=snap_side_effect),
+    ):
+        result = recompute_kpis_for_dataset(db, dataset_id)
+
+    assert kpi_ok.id in result
+    assert kpi_fail.id not in result
+    assert call_count == 2

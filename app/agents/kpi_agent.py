@@ -25,18 +25,21 @@ from app.agents.messaging import AgentEvent, AgentPublisher, AgentSubscriber
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.crud.dataset import get_dataset
-from app.crud.kpi import create_kpi
+from app.crud.kpi import create_kpi, list_kpis
 from app.crud.schema_metadata import get_schema_metadata_by_table
 from app.prompts import load_prompt
 from app.schemas.kpi import KPICreate
 from app.services.embedding_service import upsert_embedding
-from app.services.kpi_calculation_service import compute_and_snapshot
+from app.services.hitl_workflow_service import create_kpi_approval
+from app.services.kpi_calculation_service import snapshot_kpi
 from app.services.langfuse_service import get_langfuse
 
 logger = logging.getLogger(__name__)
 
 EVENT_QUALITY_PASSED = "dataset_quality_passed"
 EVENT_KPI_GENERATED = "kpi_generated"
+EVENT_DATASET_REFRESHED = "dataset_refreshed"
+EVENT_KPIS_RECOMPUTED = "kpis_recomputed"
 
 
 class _SingleKPI(BaseModel):
@@ -168,7 +171,16 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
             kpi = create_kpi(db, kpi_create)
 
             try:
-                compute_and_snapshot(db, kpi)
+                create_kpi_approval(db, kpi.id)
+            except Exception:
+                logger.warning(
+                    "Approval request creation failed for KPI %s — continuing",
+                    kpi.id,
+                    exc_info=True,
+                )
+
+            try:
+                snapshot_kpi(db, kpi)
             except Exception:
                 logger.warning(
                     "Snapshot failed for KPI %s (%s) — continuing", kpi.id, kpi.name, exc_info=True
@@ -225,16 +237,40 @@ Generate 3–6 high-quality KPI definitions. Return ONLY valid JSON.
 """.strip()
 
 
+def recompute_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[uuid.UUID]:
+    """Recompute snapshots for all certified KPIs of a dataset.
+
+    Called on dataset refresh — does not regenerate KPI definitions.
+    """
+    kpis = list_kpis(db, dataset_id=dataset_id, status="certified")
+    recomputed: list[uuid.UUID] = []
+    for kpi in kpis:
+        try:
+            snapshot_kpi(db, kpi)
+            recomputed.append(kpi.id)
+        except Exception:
+            logger.warning("Snapshot recompute failed for KPI %s — skipping", kpi.id, exc_info=True)
+            db.rollback()
+    logger.info("Recomputed %d KPI snapshots for dataset %s", len(recomputed), dataset_id)
+    return recomputed
+
+
 class KPIAgent(AgentSubscriber):
     def __init__(self, consumer_name: str = "kpi-agent-worker-1") -> None:
         super().__init__(
             group_name="kpi-agent",
             consumer_name=consumer_name,
-            event_types=[EVENT_QUALITY_PASSED],
+            event_types=[EVENT_QUALITY_PASSED, EVENT_DATASET_REFRESHED],
         )
         self._publisher = AgentPublisher(self._redis)
 
     def handle_event(self, event: AgentEvent) -> None:
+        if event.event_type == EVENT_DATASET_REFRESHED:
+            self._handle_dataset_refreshed(event)
+        else:
+            self._handle_quality_passed(event)
+
+    def _handle_quality_passed(self, event: AgentEvent) -> None:
         dataset_id_raw = event.payload.get("dataset_id")
         if not dataset_id_raw:
             logger.warning("dataset_quality_passed event missing dataset_id: %s", event.event_id)
@@ -266,6 +302,39 @@ class KPIAgent(AgentSubscriber):
             },
         )
         logger.info("Published kpi_generated for dataset %s (%d KPIs)", dataset_id, len(kpi_ids))
+
+    def _handle_dataset_refreshed(self, event: AgentEvent) -> None:
+        dataset_id_raw = event.payload.get("dataset_id")
+        if not dataset_id_raw:
+            logger.warning("dataset_refreshed event missing dataset_id: %s", event.event_id)
+            return
+
+        try:
+            dataset_id = uuid.UUID(str(dataset_id_raw))
+        except ValueError:
+            logger.error("Invalid dataset_id in event %s: %s", event.event_id, dataset_id_raw)
+            return
+
+        logger.info("Recomputing KPI snapshots for refreshed dataset %s", dataset_id)
+
+        db = SessionLocal()
+        try:
+            kpi_ids = recompute_kpis_for_dataset(db, dataset_id)
+        except Exception:
+            logger.exception("KPI recompute failed for dataset %s", dataset_id)
+            return
+        finally:
+            db.close()
+
+        self._publisher.publish(
+            EVENT_KPIS_RECOMPUTED,
+            {
+                "dataset_id": str(dataset_id),
+                "kpi_ids": [str(k) for k in kpi_ids],
+                "count": len(kpi_ids),
+            },
+        )
+        logger.info("Published kpis_recomputed for dataset %s (%d KPIs)", dataset_id, len(kpi_ids))
 
 
 if __name__ == "__main__":

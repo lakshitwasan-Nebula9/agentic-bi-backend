@@ -141,7 +141,7 @@ def list_snapshots(db: Session, kpi_id: uuid.UUID, limit: int = 100) -> list[KPI
     return (
         db.query(KPISnapshot)
         .filter(KPISnapshot.kpi_id == kpi_id)
-        .order_by(KPISnapshot.computed_at.desc())
+        .order_by(KPISnapshot.period_start.asc().nulls_last(), KPISnapshot.computed_at.asc())
         .limit(limit)
         .all()
     )
