@@ -26,7 +26,9 @@ def get_quality_scorecard(
             detail="Quality scorecard not yet available. Run a sync or trigger quality check.",
         )
     return QualityScorecardResponse(
-        **dataset.quality_metrics, should_quarantine=dataset.status == "quarantined"
+        **dataset.quality_metrics,
+        overall_score=dataset.quality_score,
+        should_quarantine=dataset.status == "quarantined",
     )
 
 

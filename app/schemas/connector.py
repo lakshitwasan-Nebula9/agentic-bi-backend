@@ -42,6 +42,10 @@ class ConnectorResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    table_count: int | None = None
+    kpi_count: int | None = None
+    quality_score: float | None = None
+
 
 class ConnectionTestResult(BaseModel):
     success: bool

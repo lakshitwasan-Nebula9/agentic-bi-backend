@@ -3,11 +3,14 @@ from typing import Any
 
 import psycopg2
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.crud import connector as connector_crud
 from app.models.connector import DataConnector
-from app.schemas.connector import ConnectorCreate, ConnectorUpdate
+from app.models.dataset import Dataset
+from app.models.kpi import KPIDefinition
+from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.encryption_service import decrypt_value, encrypt_value
 
 CONNECT_TIMEOUT_SECONDS = 5
@@ -153,6 +156,52 @@ def get_table_schema(connector: DataConnector, table_name: str) -> list[dict[str
         {"table_name": table_name},
     )
     return rows
+
+
+def _live_table_count(connector: DataConnector) -> int | None:
+    try:
+        return len(list_tables(connector))
+    except Exception:
+        return None
+
+
+def _kpi_count(db: Session, connector_id: uuid.UUID) -> int:
+    return (
+        db.query(func.count(KPIDefinition.id))
+        .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
+        .filter(Dataset.connector_id == connector_id)
+        .scalar()
+    ) or 0
+
+
+def _latest_quality_score(db: Session, connector_id: uuid.UUID) -> float | None:
+    dataset = (
+        db.query(Dataset)
+        .filter(Dataset.connector_id == connector_id)
+        .order_by(Dataset.created_at.desc())
+        .first()
+    )
+    return dataset.quality_score if dataset else None
+
+
+def enrich_connector(db: Session, connector: DataConnector) -> ConnectorResponse:
+    return ConnectorResponse(
+        id=connector.id,
+        name=connector.name,
+        connector_type=connector.connector_type,
+        host=connector.host,
+        port=connector.port,
+        database_name=connector.database_name,
+        username=connector.username,
+        extra_config=connector.extra_config,
+        is_active=connector.is_active,
+        created_by=connector.created_by,
+        created_at=connector.created_at,
+        updated_at=connector.updated_at,
+        table_count=_live_table_count(connector),
+        kpi_count=_kpi_count(db, connector.id),
+        quality_score=_latest_quality_score(db, connector.id),
+    )
 
 
 def extract_rows(

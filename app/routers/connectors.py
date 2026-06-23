@@ -36,7 +36,8 @@ def list_connectors(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return connector_service.list_connectors(db)
+    connectors = connector_service.list_connectors(db)
+    return [connector_service.enrich_connector(db, c) for c in connectors]
 
 
 @router.get("/{connector_id}", response_model=ConnectorResponse)
@@ -45,7 +46,8 @@ def get_connector(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return connector_service.get_connector_or_404(db, connector_id)
+    connector = connector_service.get_connector_or_404(db, connector_id)
+    return connector_service.enrich_connector(db, connector)
 
 
 @router.patch("/{connector_id}", response_model=ConnectorResponse)
