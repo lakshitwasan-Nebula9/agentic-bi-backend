@@ -27,28 +27,38 @@ def _get_or_404(db: Session, kpi_id: uuid.UUID) -> KPIDefinition:
     return kpi
 
 
+def _is_sum_metric(sql_expression: str) -> bool:
+    return sql_expression.strip().upper().startswith("SUM(")
+
+
 def _enrich(db: Session, kpis: list[KPIDefinition]) -> list[KPIResponse]:
-    """Attach current_value, mom_change_pct, and data_source_name to a batch of KPIs."""
+    """Attach current_value, MoM, YoY, QoQ, YTD, and data_source_name to a batch of KPIs."""
     if not kpis:
         return []
 
     kpi_ids = [k.id for k in kpis]
     dataset_ids = list({k.dataset_id for k in kpis})
 
-    # Latest 2 snapshots per KPI ordered by period_start (monthly snapshots),
-    # falling back to computed_at for full-dataset snapshots where period_start is NULL.
+    # All snapshots for the batch, newest first.
     all_snapshots: list[KPISnapshot] = (
         db.query(KPISnapshot)
         .filter(KPISnapshot.kpi_id.in_(kpi_ids))
         .order_by(KPISnapshot.period_start.desc().nulls_last(), KPISnapshot.computed_at.desc())
         .all()
     )
-    # Group by kpi_id, keep first two
-    snaps_by_kpi: dict[uuid.UUID, list[float]] = {}
+
+    # Group full snapshot objects by kpi_id (newest first, preserving query order).
+    snaps_by_kpi: dict[uuid.UUID, list[KPISnapshot]] = {}
     for snap in all_snapshots:
-        lst = snaps_by_kpi.setdefault(snap.kpi_id, [])
-        if len(lst) < 2:
-            lst.append(snap.value)
+        snaps_by_kpi.setdefault(snap.kpi_id, []).append(snap)
+
+    # Period map for time intelligence: kpi_id → {(year, month): value}.
+    # Only monthly snapshots (period_start is not None) are included.
+    period_map_by_kpi: dict[uuid.UUID, dict[tuple[int, int], float]] = {}
+    for snap in all_snapshots:
+        if snap.period_start is not None:
+            ym = (snap.period_start.year, snap.period_start.month)
+            period_map_by_kpi.setdefault(snap.kpi_id, {})[ym] = snap.value
 
     # Connector names via dataset join
     datasets = db.query(Dataset).filter(Dataset.id.in_(dataset_ids)).all()
@@ -60,12 +70,54 @@ def _enrich(db: Session, kpis: list[KPIDefinition]) -> list[KPIResponse]:
     results: list[KPIResponse] = []
     for kpi in kpis:
         r = KPIResponse.model_validate(kpi)
-        vals = snaps_by_kpi.get(kpi.id, [])
+        snaps = snaps_by_kpi.get(kpi.id, [])
+        period_map = period_map_by_kpi.get(kpi.id, {})
+
+        # current_value + MoM from latest 2 snapshots (full-dataset fallback included).
+        vals = [s.value for s in snaps[:2]]
         if vals:
             r.current_value = vals[0]
             if len(vals) == 2 and vals[1] != 0:
                 r.mom_change_pct = round((vals[0] - vals[1]) / vals[1] * 100, 2)
+
         r.data_source_name = source_by_dataset.get(kpi.dataset_id)
+
+        # Time intelligence requires at least one monthly snapshot.
+        current_snap = next((s for s in snaps if s.period_start is not None), None)
+        if current_snap is None:
+            results.append(r)
+            continue
+
+        cy, cm = current_snap.period_start.year, current_snap.period_start.month
+
+        # YoY: same calendar month last year (needs ≥13 months of data).
+        yoy_ym = (cy - 1, cm)
+        if yoy_ym in period_map and period_map[yoy_ym] != 0:
+            r.yoy_change_pct = round(
+                (current_snap.value - period_map[yoy_ym]) / period_map[yoy_ym] * 100, 2
+            )
+
+        # QoQ: same calendar month 3 months ago (needs ≥4 months of data).
+        total = cy * 12 + (cm - 1) - 3
+        qoq_ym = (total // 12, total % 12 + 1)
+        if qoq_ym in period_map and period_map[qoq_ym] != 0:
+            r.qoq_change_pct = round(
+                (current_snap.value - period_map[qoq_ym]) / period_map[qoq_ym] * 100, 2
+            )
+
+        # YTD: aggregate all monthly snapshots in the current year.
+        # SUM metrics are summed; AVG/rate metrics are averaged.
+        ytd_vals = [v for (yr, _), v in period_map.items() if yr == cy]
+        if ytd_vals:
+            r.ytd_value = round(
+                (
+                    sum(ytd_vals)
+                    if _is_sum_metric(kpi.sql_expression)
+                    else sum(ytd_vals) / len(ytd_vals)
+                ),
+                4,
+            )
+
         results.append(r)
     return results
 
