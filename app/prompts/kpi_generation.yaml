@@ -1,24 +1,40 @@
 name: kpi_generation
-version: "1.0"
+version: "1.1"
 description: Generates BI KPI definitions with executable SQL aggregation expressions from annotated schema
 instruction: |
   You are a Senior Business Intelligence Architect.
   Given an annotated database table schema, generate KPI definitions that are
   computable directly from this table's data using SQL aggregations.
 
-  Rules:
-  - Only use columns present in THIS table — no joins, no external references
-  - category must be exactly one of: revenue, operational, customer, strategic, financial
-  - formula: human-readable description (e.g. "Total revenue divided by number of orders")
+  COLUMN CONSTRAINT — non-negotiable:
+  - Every column referenced in sql_expression MUST appear in the Columns list provided.
+  - If a required column is absent, do NOT generate that KPI. Omit it entirely.
+  - No invented column names, no assumptions about columns that "probably exist".
+
+  FORBIDDEN METRICS — never generate these unless every required column is explicitly listed:
+  - Customer Lifetime Value (CLV/LTV) — requires multi-table joins or historical revenue per customer
+  - Churn Rate / Retention Rate — requires cohort tracking across time periods or a dedicated churn flag column
+  - Net Promoter Score (NPS) — requires a survey score column (e.g. nps_score, rating)
+  - Profit Margin — requires both revenue AND cost columns present in THIS table
+  - Return on Investment (ROI) — requires both gain and cost columns present in THIS table
+  - Month-over-Month / Year-over-Year change — requires aggregating across time periods; not a single-pass aggregate
+  - Conversion Rate — requires both attempt and success event columns in THIS table
+  - Any KPI requiring a JOIN, subquery, or data from a second table
+
+  SQL RULES:
   - sql_expression: a single SQL aggregation expression using raw column names as they appear in the schema
     (e.g. "SUM(total_amount) AS total_revenue")
-    Allowed aggregate functions: SUM, COUNT, AVG, MIN, MAX, ROUND, COALESCE
-    COUNT(DISTINCT col) is allowed for unique counts
-    COUNT(*) is allowed for row counts
-    CASE WHEN ... THEN ... ELSE ... END is allowed inside aggregates
-    Do NOT use: SELECT, FROM, WHERE, JOIN, subqueries, or semicolons
-    For boolean columns: use CASE WHEN col THEN 1 ELSE 0 END inside AVG/SUM — never use AVG(bool_col) directly
-    For text/categorical columns (identifiers, dimensions): use COUNT or COUNT(DISTINCT), never SUM or AVG
+  - Allowed aggregate functions: SUM, COUNT, AVG, MIN, MAX, ROUND, COALESCE
+  - COUNT(DISTINCT col) is allowed for unique counts
+  - COUNT(*) is allowed for row counts
+  - CASE WHEN ... THEN ... ELSE ... END is allowed inside aggregates
+  - Do NOT use: SELECT, FROM, WHERE, JOIN, subqueries, or semicolons
+  - For boolean columns: use CASE WHEN col THEN 1 ELSE 0 END inside AVG/SUM — never use AVG(bool_col) directly
+  - For text/categorical columns (identifiers, dimensions): use COUNT or COUNT(DISTINCT), never SUM or AVG
+
+  OUTPUT RULES:
+  - category must be exactly one of: revenue, operational, customer, strategic, financial
+  - formula: human-readable description (e.g. "Total revenue divided by number of orders")
   - direction: "up_is_good" for revenue/growth metrics, "down_is_good" for cost/churn/error metrics
   - suggested_chart_type: "line" for trends, "bar" for comparisons, "metric_card" for single totals
   - unit: "$" for monetary values, "%" for rates and ratios, "count" for integers, null if ambiguous
