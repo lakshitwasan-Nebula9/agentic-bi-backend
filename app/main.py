@@ -10,6 +10,7 @@ from app.routers import (
     data_quality,
     datasets,
     health,
+    insights,
     kpis,
     rag,
     schema,
@@ -31,6 +32,7 @@ app.add_middleware(
 
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
+app.include_router(insights.router, prefix=settings.API_V1_PREFIX)
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(connectors.router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboards.router, prefix=settings.API_V1_PREFIX)
