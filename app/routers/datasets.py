@@ -1,6 +1,7 @@
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,6 +17,24 @@ from app.schemas.dataset import (
 from app.services import dataset_service
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
+
+logger = logging.getLogger(__name__)
+
+
+async def _auto_generate_kpis(dataset_id: uuid.UUID) -> None:
+    """Background task: run KPI generation for a newly-synced dataset."""
+    from app.agents.kpi_agent import generate_kpis_for_dataset
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        await generate_kpis_for_dataset(db, dataset_id)
+        logger.info("Auto KPI generation complete for dataset %s", dataset_id)
+    except Exception:
+        logger.warning("Auto KPI generation failed for dataset %s", dataset_id, exc_info=True)
+    finally:
+        db.close()
+
 
 MANAGE_ROLES = (UserRole.ANALYST, UserRole.MANAGER, UserRole.EXECUTIVE)
 
@@ -66,16 +85,34 @@ def preview_dataset(
 
 
 @router.post("/{dataset_id}/sync", response_model=DatasetSyncResult)
-def sync_dataset(
+async def sync_dataset(
     dataset_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(*MANAGE_ROLES)),
 ):
-    dataset = dataset_service.sync_dataset(db, dataset_id)
+    # Capture whether this is the first sync before data is written
+    existing = dataset_service.get_dataset_or_404(db, dataset_id)
+    is_first_sync = existing.last_synced_at is None
+
+    dataset = dataset_service.sync_dataset(db, dataset_id, triggered_by=current_user.id)
+
+    # Auto-trigger KPI generation: first sync only, quality must have passed
+    kpi_triggered = False
+    if is_first_sync and dataset.status != "quarantined":
+        from app.crud import kpi as kpi_crud
+
+        if not kpi_crud.list_kpis(db, dataset_id=dataset_id):
+            background_tasks.add_task(_auto_generate_kpis, dataset_id)
+            kpi_triggered = True
+            logger.info("Queued auto KPI generation for dataset %s", dataset_id)
+
     return DatasetSyncResult(
         row_count=dataset.row_count,
         schema_fingerprint=dataset.schema_fingerprint or {},
         synced_at=dataset.last_synced_at,
+        quality_score=dataset.quality_score,
+        kpi_generation_triggered=kpi_triggered,
     )
 
 

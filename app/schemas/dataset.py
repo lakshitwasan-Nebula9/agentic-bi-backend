@@ -36,6 +36,8 @@ class DatasetSyncResult(BaseModel):
     row_count: int
     schema_fingerprint: dict
     synced_at: datetime
+    quality_score: float | None = None
+    kpi_generation_triggered: bool = False
 
 
 class DatasetRecordResponse(BaseModel):
