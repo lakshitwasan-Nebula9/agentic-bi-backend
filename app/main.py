@@ -13,6 +13,7 @@ from app.routers import (
     insights,
     kpis,
     rag,
+    reports,
     schema,
     users,
 )
@@ -42,6 +43,7 @@ app.include_router(rag.router, prefix=settings.API_V1_PREFIX)
 app.include_router(schema.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(kpis.router, prefix=settings.API_V1_PREFIX)
+app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

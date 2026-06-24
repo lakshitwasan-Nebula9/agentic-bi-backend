@@ -6,7 +6,9 @@ from app.models.embeddings import EmbeddingRecord
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.org_settings import OrgSettings
+from app.models.report import Report
 from app.models.schema_metadata import SchemaMetadata
+from app.models.sync_log import SyncLog
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -22,7 +24,9 @@ __all__ = [
     "KPISnapshot",
     "KPIVersion",
     "OrgSettings",
+    "Report",
     "SchemaMetadata",
+    "SyncLog",
     "User",
     "UserRole",
 ]
