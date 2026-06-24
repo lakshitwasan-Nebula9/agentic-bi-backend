@@ -1,7 +1,10 @@
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.agents.insight_agent import narrate
+from app.crud.kpi import get_kpi
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot
 from app.services.insight_math_service import analyze
@@ -26,11 +29,12 @@ def _already_detected(db: Session, kpi_id: uuid.UUID, period_start) -> bool:
     )
 
 
-def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
-    """Run math on the latest monthly snapshot for one KPI.
+async def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
+    """Run math on the latest monthly snapshot for one KPI, then narrate it.
 
     Returns None when there are fewer than 3 monthly snapshots or the latest
-    period has already been analysed.
+    period has already been analysed. Narration is best-effort — the event is
+    persisted with null narrative fields when the LLM is disabled or fails.
     """
     snapshots = _get_monthly_snapshots_asc(db, kpi_id)
     if len(snapshots) < 3:
@@ -56,13 +60,40 @@ def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
         insight_type=result.insight_type,
         is_anomaly=result.is_anomaly,
     )
+
+    # GenAI narration (best-effort).
+    kpi: KPIDefinition | None = get_kpi(db, kpi_id)
+    narrative = await narrate(
+        {
+            "kpi_id": kpi_id,
+            "kpi_name": kpi.display_name if kpi else None,
+            "kpi_category": kpi.category if kpi else None,
+            "unit": kpi.unit if kpi else None,
+            "direction": kpi.direction if kpi else None,
+            "value": latest.value,
+            "expected": result.baseline_mean,
+            "z_score": result.z_score,
+            "rolling_avg_3m": result.rolling_avg_3m,
+            "rolling_avg_6m": result.rolling_avg_6m,
+            "trend_slope": result.trend_slope,
+            "insight_type": result.insight_type,
+            "recent_values": values[-7:],
+        }
+    )
+    if narrative is not None:
+        event.llm_title = narrative.title
+        event.llm_category = narrative.category
+        event.llm_severity = narrative.severity
+        event.llm_summary = narrative.summary
+        event.narrated_at = datetime.now(UTC)
+
     db.add(event)
     db.commit()
     db.refresh(event)
     return event
 
 
-def detect_all(db: Session) -> list[InsightEvent]:
+async def detect_all(db: Session) -> list[InsightEvent]:
     """Run detection across all certified KPIs that have monthly snapshots."""
     kpi_ids = [
         row[0]
@@ -70,7 +101,7 @@ def detect_all(db: Session) -> list[InsightEvent]:
     ]
     events: list[InsightEvent] = []
     for kpi_id in kpi_ids:
-        event = detect_for_kpi(db, kpi_id)
+        event = await detect_for_kpi(db, kpi_id)
         if event is not None:
             events.append(event)
     return events

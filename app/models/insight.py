@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,5 +40,13 @@ class InsightEvent(Base):
     # spike | dip | trend_up | trend_down | stable
     insight_type: Mapped[str] = mapped_column(String, nullable=False, default="stable")
     is_anomaly: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # GenAI narrative layer — populated best-effort by the Insight Agent (Gemini).
+    # All nullable: the math event persists even when the LLM is disabled or fails.
+    llm_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    llm_category: Mapped[str | None] = mapped_column(String, nullable=True)
+    llm_severity: Mapped[str | None] = mapped_column(String, nullable=True)  # info|warning|critical
+    llm_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    narrated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
