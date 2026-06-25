@@ -2,6 +2,12 @@
 # Fired by settings.json only when the Bash command starts with "git commit".
 # Check lint first; only auto-fix and block if there are actual violations.
 
+# Prefer the project virtualenv's tools so the hook works even when it runs in a
+# shell that hasn't activated the venv (e.g. spawned non-interactively).
+if [ -x "venv/bin/ruff" ]; then
+  PATH="$PWD/venv/bin:$PATH"
+fi
+
 ruff_ok=0
 black_ok=0
 ruff check . >/dev/null 2>&1 && ruff_ok=1
