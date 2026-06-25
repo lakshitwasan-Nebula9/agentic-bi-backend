@@ -1,13 +1,30 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.insight import InsightEventResponse
 from app.services import insight_service
+from app.ws.connection_manager import connection_manager
 
 router = APIRouter(tags=["insights"])
+
+
+@router.websocket("/insights/ws")
+async def insights_ws(websocket: WebSocket) -> None:
+    """Live insight feed for the frontend.
+
+    Clients connect and receive ``{"type": "insight_detected", "data": {...}}``
+    messages (the InsightEventResponse payload) as detection runs. Inbound
+    messages are ignored — they only serve to detect a client disconnect.
+    """
+    await connection_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await connection_manager.disconnect(websocket)
 
 
 @router.post("/insights/detect", response_model=list[InsightEventResponse], status_code=201)

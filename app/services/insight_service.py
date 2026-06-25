@@ -1,13 +1,34 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.agents.insight_agent import narrate
+from app.agents.messaging import AgentPublisher
 from app.crud.kpi import get_kpi
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot
+from app.schemas.insight import InsightEventResponse
 from app.services.insight_math_service import analyze
+from app.ws.events import INSIGHT_DETECTED
+
+logger = logging.getLogger(__name__)
+
+_publisher = AgentPublisher()
+
+
+def _publish_insight(event: InsightEvent) -> None:
+    """Best-effort: emit the new insight onto Redis for the WebSocket listener.
+
+    Detection must never fail because the broker is down, so any error here is
+    logged and swallowed — the InsightEvent is already persisted.
+    """
+    try:
+        payload = InsightEventResponse.model_validate(event).model_dump(mode="json")
+        _publisher.publish(INSIGHT_DETECTED, payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to publish insight event %s to Redis", event.id, exc_info=True)
 
 
 def _get_monthly_snapshots_asc(db: Session, kpi_id: uuid.UUID) -> list[KPISnapshot]:
@@ -90,6 +111,7 @@ async def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
     db.add(event)
     db.commit()
     db.refresh(event)
+    _publish_insight(event)
     return event
 
 
