@@ -16,34 +16,60 @@ uvicorn app.main:app --reload          # dev server on :8000
 
 ### Docker
 ```bash
-docker compose up --build              # start API + Postgres
-docker compose up -d db                # start only Postgres (for local dev against real DB)
+docker compose up --build              # start API + sample-data Postgres + Redis
+docker compose up -d db                # start only the local sample-data Postgres
 ```
+
+## Databases
+
+**Supabase is the only database.** All project data and metadata — connectors, datasets, KPIs,
+snapshots, insights, explanations, dashboards, users, etc. — live in Supabase. `.env` `DATABASE_URL`
+points at Supabase; the running API, the migrations, **and the test suite** all target it.
+
+The only other database is the **local docker Postgres (`db` service, `agentic_bi`)** — a throwaway
+*sample data source* used only to exercise connector functionality (e.g. the `orders` /
+`support_tickets` demo tables). It is **not** the app DB and is slated for removal. Never point the
+app or store project data here.
+
+**Tests run against Supabase** (`DATABASE_URL` from `.env`). There is no separate test database, so the
+suite operates on real project data — every test must create its own rows with unique identifiers and
+clean them up in teardown (see `tests/test_explanation_endpoint.py` for the pattern). Avoid assertions
+on global row counts or unscoped deletes.
+
+**CI is the exception:** `.github/workflows/ci.yml` runs against a fresh, ephemeral Postgres service
+(not Supabase), so it can `alembic upgrade head` on a clean DB and run the suite in isolation — that's
+the one place migrations get validated. (CI works only while a single branch's lineage is checked out;
+see the merge caveat below.)
 
 ### Alembic Migrations
 ```bash
 alembic revision --autogenerate -m "description"   # generate migration from model changes
-alembic upgrade head                               # apply all pending migrations
+alembic upgrade head                               # apply to Supabase (DATABASE_URL from .env)
 alembic downgrade -1                               # roll back one migration
 ```
-The `alembic.ini` hardcodes a fallback DB URL, but `alembic/env.py` overrides it with `settings.DATABASE_URL` from `.env` — always set the real URL there.
+The `alembic.ini` hardcodes a fallback DB URL, but `alembic/env.py` overrides it with
+`settings.DATABASE_URL` from `.env` — so migrations target Supabase by default.
 
-**Local vs Docker hostname:** `.env` uses `DATABASE_URL=postgresql://user:password@db:5432/agentic_bi` where `db` is the Docker-internal hostname. When running Alembic or pytest locally (outside Docker), override it on the command line:
-```bash
-DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi alembic upgrade head
-DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi python -m pytest tests/
-```
+**Multi-dev caveat:** Lakshit's and Aanchal's branches keep separate Alembic lineages that both get
+applied to the shared Supabase DB, so Supabase's `alembic_version` currently sits on the other branch's
+head and `alembic upgrade head` reports an unknown revision (`Can't locate revision …`). Because of
+this, **don't run `alembic upgrade head` against Supabase as a routine step** — the schema is already
+applied. Do **not** `alembic stamp` Supabase to your own head either (it erases the other lineage's
+record). Reconcile with `alembic merge heads` when branches integrate into `master`; until then, a new
+table can be applied to Supabase with the migration's DDL directly.
 
 ## Pre-Commit Checklist
 
 Run all of these before every commit. Use `/ship` to automate the full sequence.
 
+Tests run against Supabase (`DATABASE_URL` from `.env`) — there is no separate test DB and no
+`alembic upgrade head` step (see the multi-dev caveat above; the Supabase schema is already applied).
+
 ```bash
 ruff check . --fix && black .          # lint + format (auto-fix)
 ruff check . && black --check .        # verify clean
-docker compose up -d db                # ensure Postgres is up
-DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi alembic upgrade head
-DATABASE_URL=postgresql://user:password@localhost:5432/agentic_bi python -m pytest tests/ -v --tb=short
+docker compose up -d db redis          # sample-data source + Redis event bus the tests need
+python -m pytest tests/ -v --tb=short  # DATABASE_URL from .env → Supabase
 docker build -t agentic-bi-backend:ci .
 ```
 
