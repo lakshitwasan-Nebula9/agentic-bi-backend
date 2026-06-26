@@ -1,19 +1,25 @@
 import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.agents.messaging import INSIGHT_DETECTED, stream_name
+from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.crud import insight as insight_crud
 from app.crud import user as user_crud
+from app.crud.explanation import get_by_insight
+from app.models.insight import InsightEvent
+from app.schemas.explanation import InsightExplanationResponse
 from app.schemas.insight import InsightEventResponse
 from app.services import insight_service
 from app.services.auth_service import decode_access_token
-from app.ws.connection_manager import connection_manager
+from app.services.explainability_service import build_explanation
 
 router = APIRouter(tags=["insights"])
 
@@ -36,22 +42,6 @@ def _resolve_sse_user(token: str, db: Session):
     if user is None or not user.is_active:
         raise exc
     return user
-
-
-@router.websocket("/insights/ws")
-async def insights_ws(websocket: WebSocket) -> None:
-    """Live insight feed for the frontend.
-
-    Clients connect and receive ``{"type": "insight_detected", "data": {...}}``
-    messages (the InsightEventResponse payload) as detection runs. Inbound
-    messages are ignored — they only serve to detect a client disconnect.
-    """
-    await connection_manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        await connection_manager.disconnect(websocket)
 
 
 @router.post("/insights/detect", response_model=list[InsightEventResponse], status_code=201)
@@ -95,12 +85,13 @@ async def stream_insights(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ):
-    """SSE stream that pushes new InsightEvent rows in real time.
+    """SSE stream of new InsightEvents — Redis-driven, no DB polling.
 
-    EventSource cannot set headers, so the JWT may be passed as ``?token=``.
-    A standard ``Authorization: Bearer`` header is also accepted.
-    Send ``?since=<ISO-timestamp>`` to replay events the client may have missed.
-    A ``:keepalive`` comment is sent every ~15 s to prevent proxy timeouts.
+    On connect, replays anything since ``?since=<ISO-timestamp>`` from the DB so a
+    reconnecting client catches up, then tails the Redis ``insight_detected`` stream
+    and pushes each insight the instant it is detected. EventSource cannot set
+    headers, so the JWT may be passed as ``?token=`` (a Bearer header also works).
+    A ``:keepalive`` comment is emitted on idle to keep proxies from timing out.
     """
     raw_token = (credentials.credentials if credentials else None) or token
     if not raw_token:
@@ -108,25 +99,42 @@ async def stream_insights(
     _resolve_sse_user(raw_token, db)
 
     async def event_generator():
-        last_seen: datetime = since or datetime.now(UTC)
-        keepalive_counter = 0
-
-        while True:
-            poll_db: Session = SessionLocal()
+        # 1. Catch-up: replay events the client missed since `since` (DB read, once).
+        if since is not None:
+            replay_db: Session = SessionLocal()
             try:
-                new_events = insight_crud.list_insight_events_since(poll_db, last_seen)
-                for event in new_events:
+                for event in insight_crud.list_insight_events_since(replay_db, since):
                     payload = InsightEventResponse.model_validate(event).model_dump_json()
                     yield f"data: {payload}\n\n"
-                    last_seen = event.created_at
             finally:
-                poll_db.close()
+                replay_db.close()
 
-            await asyncio.sleep(2)
-            keepalive_counter += 1
-            if keepalive_counter >= 8:  # every ~15 s
-                yield ": keepalive\n\n"
-                keepalive_counter = 0
+        # 2. Live: tail the Redis stream — event-driven push, no polling.
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        stream = stream_name(INSIGHT_DETECTED)
+        last_id = "$"  # only events produced after this connection opens
+        try:
+            while True:
+                try:
+                    response = await client.xread({stream: last_id}, block=15000, count=10)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — survive transient broker errors
+                    await asyncio.sleep(1.0)
+                    continue
+
+                if not response:
+                    yield ": keepalive\n\n"  # XREAD block timed out → idle keepalive
+                    continue
+
+                for _stream, messages in response:
+                    for message_id, fields in messages:
+                        last_id = message_id
+                        payload = fields.get("payload")
+                        if payload:  # already an InsightEventResponse JSON string
+                            yield f"data: {payload}\n\n"
+        finally:
+            await client.aclose()
 
     return StreamingResponse(
         event_generator(),
@@ -136,3 +144,22 @@ async def stream_insights(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/insights/{insight_id}/explanation", response_model=InsightExplanationResponse)
+def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Explainability receipt for the insight drill-down modal.
+
+    Normally written by the Explainability Agent on the ``insight_detected`` event;
+    if the receipt is missing (worker not yet processed, or broker down) it is built
+    lazily on first request so the modal always has data.
+    """
+    insight = db.get(InsightEvent, insight_id)
+    if insight is None:
+        raise HTTPException(status_code=404, detail=f"Insight {insight_id} not found")
+
+    record = get_by_insight(db, insight_id) or build_explanation(db, insight)
+
+    response = InsightExplanationResponse.model_validate(record)
+    response.rationale = insight.llm_summary
+    return response

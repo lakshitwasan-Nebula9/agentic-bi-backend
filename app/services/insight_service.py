@@ -5,13 +5,12 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.agents.insight_agent import narrate
-from app.agents.messaging import AgentPublisher
+from app.agents.messaging import INSIGHT_DETECTED, AgentPublisher
 from app.crud.kpi import get_kpi
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot
 from app.schemas.insight import InsightEventResponse
 from app.services.insight_math_service import analyze
-from app.ws.events import INSIGHT_DETECTED
 
 logger = logging.getLogger(__name__)
 

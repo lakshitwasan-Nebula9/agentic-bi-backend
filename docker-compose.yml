@@ -18,6 +18,21 @@ services:
     volumes:
       - .:/app
 
+  explainability-agent:
+    build: .
+    command: python -m app.agents.explainability_agent
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
   db:
     image: pgvector/pgvector:pg16
     environment:
