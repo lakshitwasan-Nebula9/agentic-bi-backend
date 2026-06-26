@@ -12,6 +12,11 @@ from app.core.config import settings
 
 STREAM_PREFIX = "events:"
 
+# Event type the Insight Agent emits when it persists a new InsightEvent. The SSE
+# endpoint tails this stream to push insights to the frontend in real time, and the
+# Explainability Agent consumes it to build receipts.
+INSIGHT_DETECTED = "insight_detected"
+
 
 def stream_name(event_type: str) -> str:
     return f"{STREAM_PREFIX}{event_type}"

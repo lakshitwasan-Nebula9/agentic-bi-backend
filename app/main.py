@@ -1,7 +1,3 @@
-import asyncio
-import logging
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,29 +17,10 @@ from app.routers import (
     schema,
     users,
 )
-from app.ws.insight_listener import run_insight_listener
-
-logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Run the insight WebSocket listener for the lifetime of the app."""
-    listener = asyncio.create_task(run_insight_listener())
-    try:
-        yield
-    finally:
-        listener.cancel()
-        try:
-            await listener
-        except asyncio.CancelledError:
-            pass
-
 
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
-    lifespan=lifespan,
 )
 
 app.add_middleware(

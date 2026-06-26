@@ -3,6 +3,7 @@ from app.models.connector import DataConnector
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.dataset import Dataset, DatasetRecord
 from app.models.embeddings import EmbeddingRecord
+from app.models.explanation import InsightExplanation
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.org_settings import OrgSettings
@@ -19,6 +20,7 @@ __all__ = [
     "Dataset",
     "DatasetRecord",
     "EmbeddingRecord",
+    "InsightExplanation",
     "InsightEvent",
     "KPIDefinition",
     "KPISnapshot",
