@@ -39,5 +39,30 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str | None = None
     LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
 
+    # Decision Agent — SLA hours per priority
+    DECISION_SLA_HOURS_P1: int = 24
+    DECISION_SLA_HOURS_P2: int = 48
+    DECISION_SLA_HOURS_P3: int = 72
+
+    # Decision Agent — priority rule thresholds
+    DECISION_ADVERSE_SLOPE_THRESHOLD: float = 5.0
+
+    # Decision Agent — owner role routing
+    DECISION_P1_OWNER_OVERRIDE: str = "executive"
+    DECISION_DEFAULT_OWNER_ROLE: str = "analyst"
+    DECISION_CATEGORY_OWNER_MAP: dict[str, str] = {
+        "revenue": "executive",
+        "sales": "manager",
+        "financial": "manager",
+        "finance": "manager",
+        "operational": "operations",
+        "operations": "operations",
+        "customer": "manager",
+        "inventory": "operations",
+        "marketing": "manager",
+        "strategic": "executive",
+        "data_quality": "analyst",
+    }
+
 
 settings = Settings()
