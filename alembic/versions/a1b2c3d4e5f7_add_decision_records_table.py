@@ -62,7 +62,11 @@ def upgrade() -> None:
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("insight_event_id", name="uq_decision_records_insight_event_id"),
         )
-    existing_indexes = {i["name"] for i in inspector.get_indexes("decision_records")} if "decision_records" in inspector.get_table_names() else set()
+    existing_indexes = (
+        {i["name"] for i in inspector.get_indexes("decision_records")}
+        if "decision_records" in inspector.get_table_names()
+        else set()
+    )
     if "ix_decision_records_insight_event_id" not in existing_indexes:
         op.create_index(
             op.f("ix_decision_records_insight_event_id"),
