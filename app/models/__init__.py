@@ -2,6 +2,7 @@ from app.models.approval_request import ApprovalRequest
 from app.models.connector import DataConnector
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.dataset import Dataset, DatasetRecord
+from app.models.decision import DecisionRecord
 from app.models.embeddings import EmbeddingRecord
 from app.models.explanation import InsightExplanation
 from app.models.insight import InsightEvent
@@ -14,6 +15,7 @@ from app.models.user import User, UserRole
 
 __all__ = [
     "ApprovalRequest",
+    "DecisionRecord",
     "DataConnector",
     "Dashboard",
     "DashboardWidget",
