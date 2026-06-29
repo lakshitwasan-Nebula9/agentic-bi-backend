@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,6 +20,8 @@ from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.schema_metadata import SchemaMetadata
 from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.encryption_service import decrypt_value, encrypt_value
+
+logger = logging.getLogger(__name__)
 
 SOFT_DELETE_WINDOW_DAYS = 7
 
@@ -314,7 +317,12 @@ def test_connection_raw(
 
 
 def list_tables(connector: DataConnector) -> list[dict[str, Any]]:
-    """Return public tables from the source DB with approximate row counts."""
+    """Return public tables from the source DB with approximate row counts.
+
+    ``pg_stat_user_tables.n_live_tup`` is a planner statistic that stays at 0 for
+    freshly loaded tables until autovacuum/ANALYZE runs, so a real ``COUNT(*)`` is
+    used as a fallback whenever the estimate is missing or zero for a base table.
+    """
     rows = extract_rows(
         connector,
         """
@@ -328,6 +336,24 @@ def list_tables(connector: DataConnector) -> list[dict[str, Any]]:
         ORDER BY t.table_name
         """,
     )
+
+    for row in rows:
+        if row.get("table_type") == "BASE TABLE" and not row.get("row_estimate"):
+            # Double-quote the identifier to guard against reserved words / mixed case.
+            safe_name = '"' + row["table_name"].replace('"', '""') + '"'
+            try:
+                count_rows = extract_rows(
+                    connector, f"SELECT COUNT(*) AS exact_count FROM {safe_name}"
+                )
+                if count_rows:
+                    row["row_estimate"] = count_rows[0]["exact_count"]
+            except Exception:
+                logger.warning(
+                    "Exact row count failed for table %s — keeping estimate",
+                    row["table_name"],
+                    exc_info=True,
+                )
+
     return rows
 
 

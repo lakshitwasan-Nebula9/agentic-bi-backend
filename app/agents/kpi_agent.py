@@ -74,6 +74,33 @@ _runner: Runner = Runner(
 )
 
 
+async def _ensure_schema_metadata(db: Session, dataset, lookup_name: str):
+    """Run schema detection inline when no schema_metadata exists for the table yet.
+
+    KPI generation depends on schema_metadata, but the frontend triggers detection in
+    a separate call that can land *after* the on-sync auto-generation. To make
+    generation order-independent we detect here from the dataset's schema_fingerprint
+    (``{column_name: type}``). Returns the metadata row, or None when there is no
+    fingerprint to detect from.
+    """
+    from app.agents.schema_detection_agent import detect
+    from app.schemas.schema_detection import ColumnInput, SchemaDetectRequest
+
+    fingerprint = dataset.schema_fingerprint or {}
+    if not fingerprint:
+        return None
+
+    logger.info("schema_metadata missing for '%s' — running schema detection inline", lookup_name)
+    request = SchemaDetectRequest(
+        table_name=lookup_name,
+        columns=[
+            ColumnInput(name=name, type=str(col_type)) for name, col_type in fingerprint.items()
+        ],
+    )
+    await detect(db, request)
+    return get_schema_metadata_by_table(db, lookup_name)
+
+
 async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[uuid.UUID]:
     """Generate KPI definitions for a dataset and return the created KPI IDs."""
     dataset = get_dataset(db, dataset_id)
@@ -92,11 +119,16 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
 
     schema_meta = get_schema_metadata_by_table(db, lookup_name)
     if schema_meta is None:
+        # Auto-generation can fire (on first sync) before the frontend's separate
+        # /schema/detect call has populated schema_metadata. Run detection inline so
+        # generation is self-sufficient and order-independent.
+        schema_meta = await _ensure_schema_metadata(db, dataset, lookup_name)
+    if schema_meta is None:
         raise HTTPException(
             status_code=404,
             detail=(
-                f"Schema metadata not found for table '{lookup_name}'. "
-                "Run schema detection first."
+                f"Schema metadata not found for table '{lookup_name}' and could not be "
+                "auto-detected (dataset has no schema fingerprint). Run schema detection first."
             ),
         )
 
@@ -194,7 +226,18 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
                 f"Formula: {kpi.formula}\n"
                 f"Direction: {kpi.direction}"
             )
-            upsert_embedding(db, "kpi_definition", str(kpi.id), embed_text)
+            try:
+                upsert_embedding(db, "kpi_definition", str(kpi.id), embed_text)
+            except Exception:
+                # An embedding failure must not abort the whole batch — the KPI is
+                # already committed; pgvector lookup is a best-effort enhancement.
+                logger.warning(
+                    "Embedding failed for KPI %s (%s) — continuing",
+                    kpi.id,
+                    kpi.name,
+                    exc_info=True,
+                )
+                db.rollback()
 
             kpi_ids.append(kpi.id)
 

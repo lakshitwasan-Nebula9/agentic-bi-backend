@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,7 +12,8 @@ class DataConnector(Base):
     __tablename__ = "data_connectors"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    # Uniqueness enforced only among live (non-deleted) connectors via partial index below.
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     connector_type: Mapped[str] = mapped_column(String, nullable=False, default="postgres")
 
     host: Mapped[str] = mapped_column(String, nullable=False)
@@ -32,3 +33,12 @@ class DataConnector(Base):
     )
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_data_connectors_name_active",
+            "name",
+            unique=True,
+            postgresql_where=text("is_deleted = false"),
+        ),
+    )

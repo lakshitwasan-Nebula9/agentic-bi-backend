@@ -1,7 +1,18 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -94,3 +105,16 @@ class KPISnapshot(Base):
     )
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # Uniqueness enforced only among live snapshots so a soft-deleted period
+        # can be re-snapshotted. NULL periods stay distinct (full-dataset fallback).
+        Index(
+            "uq_kpi_snapshots_kpi_period_active",
+            "kpi_id",
+            "period_start",
+            "period_end",
+            unique=True,
+            postgresql_where=text("is_deleted = false"),
+        ),
+    )
