@@ -7,9 +7,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.crud import connector as connector_crud
+from app.models.approval_request import ApprovalRequest
 from app.models.connector import DataConnector
 from app.models.dataset import Dataset
+from app.models.embeddings import EmbeddingRecord
 from app.models.kpi import KPIDefinition, KPISnapshot
+from app.models.schema_metadata import SchemaMetadata
 from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.encryption_service import decrypt_value, encrypt_value
 
@@ -85,12 +88,41 @@ def delete_connector(db: Session, connector_id: uuid.UUID) -> None:
             db.query(KPISnapshot).filter(KPISnapshot.kpi_id.in_(kpi_ids)).delete(
                 synchronize_session=False
             )
+            # KPI embeddings (pgvector) and approval requests are linked
+            # polymorphically (no FK), so they must be cleaned up explicitly.
+            db.query(EmbeddingRecord).filter(
+                EmbeddingRecord.entity_type == "kpi_definition",
+                EmbeddingRecord.entity_id.in_([str(kpi_id) for kpi_id in kpi_ids]),
+            ).delete(synchronize_session=False)
+            db.query(ApprovalRequest).filter(
+                ApprovalRequest.entity_type == "kpi",
+                ApprovalRequest.entity_id.in_(kpi_ids),
+            ).delete(synchronize_session=False)
         db.query(KPISnapshot).filter(KPISnapshot.dataset_id.in_(dataset_ids)).delete(
             synchronize_session=False
         )
         db.query(KPIDefinition).filter(KPIDefinition.dataset_id.in_(dataset_ids)).delete(
             synchronize_session=False
         )
+
+        # schema_metadata uses ON DELETE SET NULL, so rows would otherwise be
+        # orphaned (and their unique table_name would block reconnecting the same
+        # source). Remove them along with their schema_description embeddings.
+        table_names = [
+            row[0]
+            for row in db.query(SchemaMetadata.table_name)
+            .filter(SchemaMetadata.dataset_id.in_(dataset_ids))
+            .all()
+        ]
+        if table_names:
+            db.query(EmbeddingRecord).filter(
+                EmbeddingRecord.entity_type == "schema_description",
+                EmbeddingRecord.entity_id.in_(table_names),
+            ).delete(synchronize_session=False)
+        db.query(SchemaMetadata).filter(SchemaMetadata.dataset_id.in_(dataset_ids)).delete(
+            synchronize_session=False
+        )
+
         db.query(Dataset).filter(Dataset.connector_id == connector_id).delete(
             synchronize_session=False
         )
