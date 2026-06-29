@@ -60,16 +60,29 @@ def list_insights(
     insight_type: str | None = None,
     is_anomaly: bool | None = None,
     limit: int = 100,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     return insight_service.list_insights(
-        db, kpi_id=kpi_id, insight_type=insight_type, is_anomaly=is_anomaly, limit=limit
+        db,
+        kpi_id=kpi_id,
+        insight_type=insight_type,
+        is_anomaly=is_anomaly,
+        limit=limit,
+        include_deleted=include_deleted,
     )
 
 
 @router.get("/insights/kpi/{kpi_id}", response_model=list[InsightEventResponse])
-def list_insights_for_kpi(kpi_id: uuid.UUID, limit: int = 50, db: Session = Depends(get_db)):
-    return insight_service.list_insights(db, kpi_id=kpi_id, limit=limit)
+def list_insights_for_kpi(
+    kpi_id: uuid.UUID,
+    limit: int = 50,
+    include_deleted: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    return insight_service.list_insights(
+        db, kpi_id=kpi_id, limit=limit, include_deleted=include_deleted
+    )
 
 
 @router.post("/insights/kpi/{kpi_id}/detect", response_model=InsightEventResponse | None)
@@ -154,7 +167,11 @@ def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(get_db)
     if the receipt is missing (worker not yet processed, or broker down) it is built
     lazily on first request so the modal always has data.
     """
-    insight = db.get(InsightEvent, insight_id)
+    insight = (
+        db.query(InsightEvent)
+        .filter(InsightEvent.id == insight_id, InsightEvent.is_deleted.is_(False))
+        .first()
+    )
     if insight is None:
         raise HTTPException(status_code=404, detail=f"Insight {insight_id} not found")
 

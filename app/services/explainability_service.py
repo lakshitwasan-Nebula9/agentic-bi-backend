@@ -26,7 +26,13 @@ def _source_dataset(db: Session, kpi, dataset: Dataset | None) -> str | None:
     """Build "<database_name>.<table_name>" (e.g. "sales_db.orders")."""
     if kpi is None:
         return None
-    connector = db.get(DataConnector, dataset.connector_id) if dataset is not None else None
+    connector = (
+        db.query(DataConnector)
+        .filter(DataConnector.id == dataset.connector_id, DataConnector.is_deleted.is_(False))
+        .first()
+        if dataset is not None
+        else None
+    )
     if connector is None:
         return kpi.table_name
     return f"{connector.database_name}.{kpi.table_name}"
@@ -37,7 +43,11 @@ def build_explanation(db: Session, insight: InsightEvent) -> InsightExplanation:
     kpi = get_kpi(db, insight.kpi_id)
     dataset = get_dataset(db, kpi.dataset_id) if kpi is not None else None
 
-    num_snapshots = db.query(KPISnapshot).filter(KPISnapshot.kpi_id == insight.kpi_id).count()
+    num_snapshots = (
+        db.query(KPISnapshot)
+        .filter(KPISnapshot.kpi_id == insight.kpi_id, KPISnapshot.is_deleted.is_(False))
+        .count()
+    )
 
     # Data freshness: when the source data was last synced; fall back to the latest
     # snapshot's computed_at when the dataset has never recorded a sync.
@@ -45,7 +55,7 @@ def build_explanation(db: Session, insight: InsightEvent) -> InsightExplanation:
     if data_freshness_at is None:
         latest = (
             db.query(KPISnapshot)
-            .filter(KPISnapshot.kpi_id == insight.kpi_id)
+            .filter(KPISnapshot.kpi_id == insight.kpi_id, KPISnapshot.is_deleted.is_(False))
             .order_by(KPISnapshot.computed_at.desc())
             .first()
         )

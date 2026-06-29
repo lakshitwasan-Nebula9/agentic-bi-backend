@@ -130,6 +130,7 @@ def derive_snapshot_period(
         "  MAX((t.row_data->>:col)::timestamp with time zone) AS period_end "
         "FROM dataset_records t "
         "WHERE t.dataset_id = :dataset_id "
+        "  AND t.is_deleted = false "
         "  AND t.row_data->>:col IS NOT NULL"
     )
     try:
@@ -179,7 +180,7 @@ def compute_monthly_snapshots(
     months_sql = text(
         "SELECT DISTINCT date_trunc('month', (row_data->>:col)::timestamptz) AS month_start "
         "FROM dataset_records "
-        "WHERE dataset_id = :dataset_id AND row_data->>:col IS NOT NULL "
+        "WHERE dataset_id = :dataset_id AND is_deleted = false AND row_data->>:col IS NOT NULL "
         "ORDER BY month_start"
     )
     try:
@@ -199,7 +200,11 @@ def compute_monthly_snapshots(
     existing_period_starts: set[datetime] = {
         row[0]
         for row in db.query(KPISnapshot.period_start)
-        .filter(KPISnapshot.kpi_id == kpi.id, KPISnapshot.period_start.isnot(None))
+        .filter(
+            KPISnapshot.kpi_id == kpi.id,
+            KPISnapshot.period_start.isnot(None),
+            KPISnapshot.is_deleted.is_(False),
+        )
         .all()
     }
 
@@ -230,6 +235,7 @@ def compute_monthly_snapshots(
             f"SELECT {substituted} FROM ("
             f"  SELECT row_data FROM dataset_records "
             f"  WHERE dataset_id = :dataset_id "
+            f"    AND is_deleted = false"
             f"    AND {date_accessor} >= :bucket_start "
             f"    AND {date_accessor} <= :bucket_end"
             f") AS t"
@@ -305,7 +311,7 @@ def compute_and_snapshot(
     substituted = _substitute_columns(kpi.sql_expression, column_names, column_types)
     sql = (
         f"SELECT {substituted} FROM "
-        "(SELECT row_data FROM dataset_records WHERE dataset_id = :dataset_id) AS t"
+        "(SELECT row_data FROM dataset_records WHERE dataset_id = :dataset_id AND is_deleted = false) AS t"
     )
 
     try:

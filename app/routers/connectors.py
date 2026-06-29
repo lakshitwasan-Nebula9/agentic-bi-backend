@@ -41,20 +41,24 @@ def create_connector(
 
 @router.get("", response_model=list[ConnectorResponse])
 def list_connectors(
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    connectors = connector_service.list_connectors(db)
+    connectors = connector_service.list_connectors(db, include_deleted=include_deleted)
     return [connector_service.enrich_connector(db, c) for c in connectors]
 
 
 @router.get("/{connector_id}", response_model=ConnectorResponse)
 def get_connector(
     connector_id: uuid.UUID,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    connector = connector_service.get_connector_or_404(db, connector_id)
+    connector = connector_service.get_connector_or_404(
+        db, connector_id, include_deleted=include_deleted
+    )
     return connector_service.enrich_connector(db, connector)
 
 
@@ -75,6 +79,16 @@ def delete_connector(
     current_user: User = Depends(require_role(*MANAGE_ROLES)),
 ):
     connector_service.delete_connector(db, connector_id)
+
+
+@router.post("/{connector_id}/restore", response_model=ConnectorResponse)
+def restore_connector(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    connector = connector_service.restore_connector(db, connector_id)
+    return connector_service.enrich_connector(db, connector)
 
 
 @router.post("/test", response_model=ConnectionTestResult)

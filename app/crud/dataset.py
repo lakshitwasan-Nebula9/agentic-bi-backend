@@ -6,16 +6,24 @@ from sqlalchemy.orm import Session
 from app.models.dataset import Dataset, DatasetRecord
 
 
-def get_dataset(db: Session, dataset_id: uuid.UUID) -> Dataset | None:
-    return db.get(Dataset, dataset_id)
+def get_dataset(
+    db: Session, dataset_id: uuid.UUID, include_deleted: bool = False
+) -> Dataset | None:
+    q = db.query(Dataset).filter(Dataset.id == dataset_id)
+    if not include_deleted:
+        q = q.filter(Dataset.is_deleted.is_(False))
+    return q.first()
 
 
 def get_dataset_by_name(db: Session, name: str) -> Dataset | None:
-    return db.query(Dataset).filter(Dataset.name == name).first()
+    return db.query(Dataset).filter(Dataset.name == name, Dataset.is_deleted.is_(False)).first()
 
 
-def list_datasets(db: Session) -> list[Dataset]:
-    return db.query(Dataset).order_by(Dataset.name).all()
+def list_datasets(db: Session, include_deleted: bool = False) -> list[Dataset]:
+    q = db.query(Dataset)
+    if not include_deleted:
+        q = q.filter(Dataset.is_deleted.is_(False))
+    return q.order_by(Dataset.name).all()
 
 
 def create_dataset(db: Session, dataset: Dataset) -> Dataset:
@@ -31,32 +39,35 @@ def delete_dataset(db: Session, dataset: Dataset) -> None:
 
 
 def replace_dataset_records(db: Session, dataset_id: uuid.UUID, rows: list[dict]) -> None:
-    db.query(DatasetRecord).filter(DatasetRecord.dataset_id == dataset_id).delete()
+    # Only remove live records; soft-deleted records are left untouched.
+    db.query(DatasetRecord).filter(
+        DatasetRecord.dataset_id == dataset_id, DatasetRecord.is_deleted.is_(False)
+    ).delete()
     for row in rows:
         db.add(DatasetRecord(dataset_id=dataset_id, row_data=row))
     db.commit()
 
 
 def list_dataset_records(
-    db: Session, dataset_id: uuid.UUID, limit: int = 100, offset: int = 0
+    db: Session,
+    dataset_id: uuid.UUID,
+    limit: int = 100,
+    offset: int = 0,
+    include_deleted: bool = False,
 ) -> list[DatasetRecord]:
-    return (
-        db.query(DatasetRecord)
-        .filter(DatasetRecord.dataset_id == dataset_id)
-        .order_by(DatasetRecord.ingested_at)
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    q = db.query(DatasetRecord).filter(DatasetRecord.dataset_id == dataset_id)
+    if not include_deleted:
+        q = q.filter(DatasetRecord.is_deleted.is_(False))
+    return q.order_by(DatasetRecord.ingested_at).offset(offset).limit(limit).all()
 
 
-def get_all_dataset_records(db: Session, dataset_id: uuid.UUID) -> list[DatasetRecord]:
-    return (
-        db.query(DatasetRecord)
-        .filter(DatasetRecord.dataset_id == dataset_id)
-        .order_by(DatasetRecord.ingested_at)
-        .all()
-    )
+def get_all_dataset_records(
+    db: Session, dataset_id: uuid.UUID, include_deleted: bool = False
+) -> list[DatasetRecord]:
+    q = db.query(DatasetRecord).filter(DatasetRecord.dataset_id == dataset_id)
+    if not include_deleted:
+        q = q.filter(DatasetRecord.is_deleted.is_(False))
+    return q.order_by(DatasetRecord.ingested_at).all()
 
 
 def mark_synced(

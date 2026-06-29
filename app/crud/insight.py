@@ -10,7 +10,7 @@ def list_insight_events_since(db: Session, since: datetime) -> list[InsightEvent
     """Return InsightEvents created after `since`, oldest-first, for SSE streaming."""
     stmt = (
         select(InsightEvent)
-        .where(InsightEvent.created_at > since)
+        .where(InsightEvent.created_at > since, InsightEvent.is_deleted.is_(False))
         .order_by(InsightEvent.created_at.asc())
     )
     return list(db.scalars(stmt).all())

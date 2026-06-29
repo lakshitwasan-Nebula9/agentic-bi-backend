@@ -5,16 +5,28 @@ from sqlalchemy.orm import Session
 from app.models.connector import DataConnector
 
 
-def get_connector(db: Session, connector_id: uuid.UUID) -> DataConnector | None:
-    return db.get(DataConnector, connector_id)
+def get_connector(
+    db: Session, connector_id: uuid.UUID, include_deleted: bool = False
+) -> DataConnector | None:
+    q = db.query(DataConnector).filter(DataConnector.id == connector_id)
+    if not include_deleted:
+        q = q.filter(DataConnector.is_deleted.is_(False))
+    return q.first()
 
 
 def get_connector_by_name(db: Session, name: str) -> DataConnector | None:
-    return db.query(DataConnector).filter(DataConnector.name == name).first()
+    return (
+        db.query(DataConnector)
+        .filter(DataConnector.name == name, DataConnector.is_deleted.is_(False))
+        .first()
+    )
 
 
-def list_connectors(db: Session) -> list[DataConnector]:
-    return db.query(DataConnector).order_by(DataConnector.name).all()
+def list_connectors(db: Session, include_deleted: bool = False) -> list[DataConnector]:
+    q = db.query(DataConnector)
+    if not include_deleted:
+        q = q.filter(DataConnector.is_deleted.is_(False))
+    return q.order_by(DataConnector.name).all()
 
 
 def create_connector(db: Session, connector: DataConnector) -> DataConnector:

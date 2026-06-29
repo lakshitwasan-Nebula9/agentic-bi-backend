@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -50,19 +50,21 @@ def create_dataset(
 
 @router.get("", response_model=list[DatasetResponse])
 def list_datasets(
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dataset_service.list_datasets(db)
+    return dataset_service.list_datasets(db, include_deleted=include_deleted)
 
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
 def get_dataset(
     dataset_id: uuid.UUID,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dataset_service.get_dataset_or_404(db, dataset_id)
+    return dataset_service.get_dataset_or_404(db, dataset_id, include_deleted=include_deleted)
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -72,6 +74,15 @@ def delete_dataset(
     current_user: User = Depends(require_role(*MANAGE_ROLES)),
 ):
     dataset_service.delete_dataset(db, dataset_id)
+
+
+@router.post("/{dataset_id}/restore", response_model=DatasetResponse)
+def restore_dataset(
+    dataset_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    return dataset_service.restore_dataset(db, dataset_id)
 
 
 @router.get("/{dataset_id}/preview", response_model=DatasetPreviewResult)

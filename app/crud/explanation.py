@@ -8,7 +8,10 @@ from app.models.explanation import InsightExplanation
 def get_by_insight(db: Session, insight_event_id: uuid.UUID) -> InsightExplanation | None:
     return (
         db.query(InsightExplanation)
-        .filter(InsightExplanation.insight_event_id == insight_event_id)
+        .filter(
+            InsightExplanation.insight_event_id == insight_event_id,
+            InsightExplanation.is_deleted.is_(False),
+        )
         .first()
     )
 

@@ -26,6 +26,7 @@ def list_decisions(
     decision_type: str | None = None,
     kpi_id: uuid.UUID | None = None,
     limit: int = 100,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -37,16 +38,18 @@ def list_decisions(
         decision_type=decision_type,
         kpi_id=kpi_id,
         limit=limit,
+        include_deleted=include_deleted,
     )
 
 
 @router.get("/decisions/{decision_id}", response_model=DecisionRecordResponse)
 def get_decision(
     decision_id: uuid.UUID,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    record = decision_crud.get_decision(db, decision_id)
+    record = decision_crud.get_decision(db, decision_id, include_deleted=include_deleted)
     if record is None:
         raise HTTPException(status_code=404, detail="Decision not found")
     return record

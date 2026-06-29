@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg2
@@ -9,12 +10,17 @@ from sqlalchemy.orm import Session
 from app.crud import connector as connector_crud
 from app.models.approval_request import ApprovalRequest
 from app.models.connector import DataConnector
-from app.models.dataset import Dataset
+from app.models.dataset import Dataset, DatasetRecord
+from app.models.decision import DecisionRecord
 from app.models.embeddings import EmbeddingRecord
-from app.models.kpi import KPIDefinition, KPISnapshot
+from app.models.explanation import InsightExplanation
+from app.models.insight import InsightEvent
+from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.schema_metadata import SchemaMetadata
 from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
 from app.services.encryption_service import decrypt_value, encrypt_value
+
+SOFT_DELETE_WINDOW_DAYS = 7
 
 CONNECT_TIMEOUT_SECONDS = 5
 
@@ -27,15 +33,17 @@ def encrypt_password(password: str) -> str:
     return encrypt_value(password)
 
 
-def get_connector_or_404(db: Session, connector_id: uuid.UUID) -> DataConnector:
-    connector = connector_crud.get_connector(db, connector_id)
+def get_connector_or_404(
+    db: Session, connector_id: uuid.UUID, include_deleted: bool = False
+) -> DataConnector:
+    connector = connector_crud.get_connector(db, connector_id, include_deleted=include_deleted)
     if connector is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connector not found")
     return connector
 
 
-def list_connectors(db: Session) -> list[DataConnector]:
-    return connector_crud.list_connectors(db)
+def list_connectors(db: Session, include_deleted: bool = False) -> list[DataConnector]:
+    return connector_crud.list_connectors(db, include_deleted=include_deleted)
 
 
 def create_connector(db: Session, payload: ConnectorCreate, created_by: uuid.UUID) -> DataConnector:
@@ -73,41 +81,161 @@ def update_connector(
 
 def delete_connector(db: Session, connector_id: uuid.UUID) -> None:
     connector = get_connector_or_404(db, connector_id)
+    now = datetime.now(UTC)
+    stamp = {"is_deleted": True, "deleted_at": now}
 
     dataset_ids = [
-        row[0] for row in db.query(Dataset.id).filter(Dataset.connector_id == connector_id).all()
+        row[0]
+        for row in db.query(Dataset.id)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False))
+        .all()
     ]
     if dataset_ids:
         kpi_ids = [
             row[0]
             for row in db.query(KPIDefinition.id)
-            .filter(KPIDefinition.dataset_id.in_(dataset_ids))
+            .filter(KPIDefinition.dataset_id.in_(dataset_ids), KPIDefinition.is_deleted.is_(False))
             .all()
         ]
         if kpi_ids:
-            db.query(KPISnapshot).filter(KPISnapshot.kpi_id.in_(kpi_ids)).delete(
-                synchronize_session=False
+            db.query(KPISnapshot).filter(
+                KPISnapshot.kpi_id.in_(kpi_ids), KPISnapshot.is_deleted.is_(False)
+            ).update(stamp, synchronize_session=False)
+            db.query(KPIVersion).filter(KPIVersion.kpi_id.in_(kpi_ids)).update(
+                stamp, synchronize_session=False
             )
-            # KPI embeddings (pgvector) and approval requests are linked
-            # polymorphically (no FK), so they must be cleaned up explicitly.
+
+            insight_ids = [
+                row[0]
+                for row in db.query(InsightEvent.id)
+                .filter(InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(False))
+                .all()
+            ]
+            if insight_ids:
+                db.query(InsightExplanation).filter(
+                    InsightExplanation.insight_event_id.in_(insight_ids),
+                    InsightExplanation.is_deleted.is_(False),
+                ).update(stamp, synchronize_session=False)
+                db.query(DecisionRecord).filter(
+                    DecisionRecord.insight_event_id.in_(insight_ids),
+                    DecisionRecord.is_deleted.is_(False),
+                ).update(stamp, synchronize_session=False)
+            db.query(InsightEvent).filter(
+                InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(False)
+            ).update(stamp, synchronize_session=False)
+
+            # Polymorphic tables (no FK) — must be stamped explicitly.
             db.query(EmbeddingRecord).filter(
                 EmbeddingRecord.entity_type == "kpi_definition",
-                EmbeddingRecord.entity_id.in_([str(kpi_id) for kpi_id in kpi_ids]),
-            ).delete(synchronize_session=False)
+                EmbeddingRecord.entity_id.in_([str(kid) for kid in kpi_ids]),
+                EmbeddingRecord.is_deleted.is_(False),
+            ).update(stamp, synchronize_session=False)
             db.query(ApprovalRequest).filter(
                 ApprovalRequest.entity_type == "kpi",
                 ApprovalRequest.entity_id.in_(kpi_ids),
-            ).delete(synchronize_session=False)
-        db.query(KPISnapshot).filter(KPISnapshot.dataset_id.in_(dataset_ids)).delete(
-            synchronize_session=False
+                ApprovalRequest.is_deleted.is_(False),
+            ).update(stamp, synchronize_session=False)
+
+        db.query(KPIDefinition).filter(
+            KPIDefinition.dataset_id.in_(dataset_ids), KPIDefinition.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+
+        table_names = [
+            row[0]
+            for row in db.query(SchemaMetadata.table_name)
+            .filter(
+                SchemaMetadata.dataset_id.in_(dataset_ids), SchemaMetadata.is_deleted.is_(False)
+            )
+            .all()
+        ]
+        if table_names:
+            db.query(EmbeddingRecord).filter(
+                EmbeddingRecord.entity_type == "schema_description",
+                EmbeddingRecord.entity_id.in_(table_names),
+                EmbeddingRecord.is_deleted.is_(False),
+            ).update(stamp, synchronize_session=False)
+        db.query(SchemaMetadata).filter(
+            SchemaMetadata.dataset_id.in_(dataset_ids), SchemaMetadata.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+
+        db.query(DatasetRecord).filter(
+            DatasetRecord.dataset_id.in_(dataset_ids), DatasetRecord.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+        db.query(Dataset).filter(
+            Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+        db.flush()
+
+    connector.is_deleted = True
+    connector.deleted_at = now
+    db.commit()
+
+
+def restore_connector(db: Session, connector_id: uuid.UUID) -> DataConnector:
+    connector = get_connector_or_404(db, connector_id, include_deleted=True)
+    if not connector.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Connector is not deleted"
         )
-        db.query(KPIDefinition).filter(KPIDefinition.dataset_id.in_(dataset_ids)).delete(
-            synchronize_session=False
+    if connector.deleted_at is None or connector.deleted_at < datetime.now(UTC) - timedelta(
+        days=SOFT_DELETE_WINDOW_DAYS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Restore window has expired (7 days). Data has been permanently removed.",
         )
 
-        # schema_metadata uses ON DELETE SET NULL, so rows would otherwise be
-        # orphaned (and their unique table_name would block reconnecting the same
-        # source). Remove them along with their schema_description embeddings.
+    restore = {"is_deleted": False, "deleted_at": None}
+
+    dataset_ids = [
+        row[0]
+        for row in db.query(Dataset.id)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(True))
+        .all()
+    ]
+    if dataset_ids:
+        kpi_ids = [
+            row[0]
+            for row in db.query(KPIDefinition.id)
+            .filter(KPIDefinition.dataset_id.in_(dataset_ids), KPIDefinition.is_deleted.is_(True))
+            .all()
+        ]
+        if kpi_ids:
+            insight_ids = [
+                row[0]
+                for row in db.query(InsightEvent.id)
+                .filter(InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(True))
+                .all()
+            ]
+            if insight_ids:
+                db.query(InsightExplanation).filter(
+                    InsightExplanation.insight_event_id.in_(insight_ids)
+                ).update(restore, synchronize_session=False)
+                db.query(DecisionRecord).filter(
+                    DecisionRecord.insight_event_id.in_(insight_ids)
+                ).update(restore, synchronize_session=False)
+            db.query(InsightEvent).filter(InsightEvent.kpi_id.in_(kpi_ids)).update(
+                restore, synchronize_session=False
+            )
+            db.query(KPISnapshot).filter(KPISnapshot.kpi_id.in_(kpi_ids)).update(
+                restore, synchronize_session=False
+            )
+            db.query(KPIVersion).filter(KPIVersion.kpi_id.in_(kpi_ids)).update(
+                restore, synchronize_session=False
+            )
+            db.query(EmbeddingRecord).filter(
+                EmbeddingRecord.entity_type == "kpi_definition",
+                EmbeddingRecord.entity_id.in_([str(kid) for kid in kpi_ids]),
+            ).update(restore, synchronize_session=False)
+            db.query(ApprovalRequest).filter(
+                ApprovalRequest.entity_type == "kpi",
+                ApprovalRequest.entity_id.in_(kpi_ids),
+            ).update(restore, synchronize_session=False)
+
+        db.query(KPIDefinition).filter(KPIDefinition.dataset_id.in_(dataset_ids)).update(
+            restore, synchronize_session=False
+        )
+
         table_names = [
             row[0]
             for row in db.query(SchemaMetadata.table_name)
@@ -118,17 +246,24 @@ def delete_connector(db: Session, connector_id: uuid.UUID) -> None:
             db.query(EmbeddingRecord).filter(
                 EmbeddingRecord.entity_type == "schema_description",
                 EmbeddingRecord.entity_id.in_(table_names),
-            ).delete(synchronize_session=False)
-        db.query(SchemaMetadata).filter(SchemaMetadata.dataset_id.in_(dataset_ids)).delete(
-            synchronize_session=False
+            ).update(restore, synchronize_session=False)
+        db.query(SchemaMetadata).filter(SchemaMetadata.dataset_id.in_(dataset_ids)).update(
+            restore, synchronize_session=False
         )
 
-        db.query(Dataset).filter(Dataset.connector_id == connector_id).delete(
-            synchronize_session=False
+        db.query(DatasetRecord).filter(DatasetRecord.dataset_id.in_(dataset_ids)).update(
+            restore, synchronize_session=False
+        )
+        db.query(Dataset).filter(Dataset.connector_id == connector_id).update(
+            restore, synchronize_session=False
         )
         db.flush()
 
-    connector_crud.delete_connector(db, connector)
+    connector.is_deleted = False
+    connector.deleted_at = None
+    db.commit()
+    db.refresh(connector)
+    return connector
 
 
 def _connection_kwargs(connector: DataConnector, password: str) -> dict[str, Any]:
@@ -227,7 +362,8 @@ def _kpi_count(db: Session, connector_id: uuid.UUID) -> int:
     return (
         db.query(func.count(KPIDefinition.id))
         .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
-        .filter(Dataset.connector_id == connector_id)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False))
+        .filter(KPIDefinition.is_deleted.is_(False))
         .scalar()
     ) or 0
 
@@ -235,7 +371,7 @@ def _kpi_count(db: Session, connector_id: uuid.UUID) -> int:
 def _latest_quality_score(db: Session, connector_id: uuid.UUID) -> float | None:
     dataset = (
         db.query(Dataset)
-        .filter(Dataset.connector_id == connector_id)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False))
         .order_by(Dataset.created_at.desc())
         .first()
     )

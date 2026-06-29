@@ -43,8 +43,13 @@ def create_approval_request(
     return ar
 
 
-def get_approval_request(db: Session, ar_id: uuid.UUID) -> ApprovalRequest | None:
-    return db.get(ApprovalRequest, ar_id)
+def get_approval_request(
+    db: Session, ar_id: uuid.UUID, include_deleted: bool = False
+) -> ApprovalRequest | None:
+    q = db.query(ApprovalRequest).filter(ApprovalRequest.id == ar_id)
+    if not include_deleted:
+        q = q.filter(ApprovalRequest.is_deleted.is_(False))
+    return q.first()
 
 
 def get_approval_by_entity(
@@ -59,6 +64,7 @@ def get_approval_by_entity(
             ApprovalRequest.entity_type == entity_type,
             ApprovalRequest.entity_id == entity_id,
             ApprovalRequest.status == status,
+            ApprovalRequest.is_deleted.is_(False),
         )
         .first()
     )
@@ -69,8 +75,11 @@ def list_approvals(
     status: str | None = None,
     entity_type: str | None = None,
     assigned_role: str | None = None,
+    include_deleted: bool = False,
 ) -> list[ApprovalRequest]:
     q = db.query(ApprovalRequest)
+    if not include_deleted:
+        q = q.filter(ApprovalRequest.is_deleted.is_(False))
     if status is not None:
         q = q.filter(ApprovalRequest.status == status)
     if entity_type is not None:

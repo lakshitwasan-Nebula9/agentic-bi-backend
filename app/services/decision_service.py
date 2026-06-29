@@ -116,7 +116,11 @@ async def make_decision(db: Session, insight_event_id: uuid.UUID) -> DecisionRec
         return existing
 
     # 2. Fetch context
-    event: InsightEvent | None = db.get(InsightEvent, insight_event_id)
+    event: InsightEvent | None = (
+        db.query(InsightEvent)
+        .filter(InsightEvent.id == insight_event_id, InsightEvent.is_deleted.is_(False))
+        .first()
+    )
     if event is None:
         logger.warning("InsightEvent %s not found — cannot make decision", insight_event_id)
         return None
@@ -210,7 +214,10 @@ async def make_decisions_for_all_pending(db: Session) -> list[DecisionRecord]:
     from app.models.insight import InsightEvent as IE
 
     undecided = db.scalars(
-        select(IE).where(~IE.id.in_(select(DecisionRecord.insight_event_id)))
+        select(IE).where(
+            ~IE.id.in_(select(DecisionRecord.insight_event_id)),
+            IE.is_deleted.is_(False),
+        )
     ).all()
 
     results: list[DecisionRecord] = []

@@ -29,6 +29,7 @@ def upsert_embedding(
         .filter(
             EmbeddingRecord.entity_type == entity_type,
             EmbeddingRecord.entity_id == entity_id,
+            EmbeddingRecord.is_deleted.is_(False),
         )
         .first()
     )
@@ -58,7 +59,7 @@ def search_similar(
 ) -> list[EmbeddingRecord]:
     query_embedding = generate_embedding(query)
 
-    q = db.query(EmbeddingRecord)
+    q = db.query(EmbeddingRecord).filter(EmbeddingRecord.is_deleted.is_(False))
     if entity_type:
         q = q.filter(EmbeddingRecord.entity_type == entity_type)
 

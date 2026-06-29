@@ -30,7 +30,7 @@ def test_build_explanation_derives_modal_values():
 
     db = MagicMock()
     db.query.return_value.filter.return_value.count.return_value = 12
-    db.get.return_value = connector  # DataConnector lookup
+    db.query.return_value.filter.return_value.first.return_value = connector
 
     with (
         patch("app.services.explainability_service.get_kpi", return_value=kpi),
@@ -57,7 +57,7 @@ def test_build_explanation_handles_missing_connector():
 
     db = MagicMock()
     db.query.return_value.filter.return_value.count.return_value = 6
-    db.get.return_value = None  # connector not found
+    db.query.return_value.filter.return_value.first.return_value = None
 
     with (
         patch("app.services.explainability_service.get_kpi", return_value=kpi),

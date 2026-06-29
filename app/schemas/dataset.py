@@ -25,6 +25,8 @@ class DatasetResponse(BaseModel):
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
 
 
 class DatasetPreviewResult(BaseModel):
