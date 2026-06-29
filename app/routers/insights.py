@@ -160,7 +160,7 @@ async def stream_insights(
 
 
 @router.get("/insights/{insight_id}/explanation", response_model=InsightExplanationResponse)
-def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(get_db)):
+async def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(get_db)):
     """Explainability receipt for the insight drill-down modal.
 
     Normally written by the Explainability Agent on the ``insight_detected`` event;
@@ -175,7 +175,7 @@ def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(get_db)
     if insight is None:
         raise HTTPException(status_code=404, detail=f"Insight {insight_id} not found")
 
-    record = get_by_insight(db, insight_id) or build_explanation(db, insight)
+    record = get_by_insight(db, insight_id) or await build_explanation(db, insight)
 
     response = InsightExplanationResponse.model_validate(record)
     response.rationale = insight.llm_summary

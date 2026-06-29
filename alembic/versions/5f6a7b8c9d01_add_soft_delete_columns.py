@@ -1,6 +1,6 @@
 """add soft delete columns (is_deleted + deleted_at) to all entity tables
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 5f6a7b8c9d01
 Revises: 70a7c1c9e45c
 Create Date: 2026-06-29
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "a1b2c3d4e5f6"
+revision = "5f6a7b8c9d01"
 down_revision = "70a7c1c9e45c"
 branch_labels = None
 depends_on = None
