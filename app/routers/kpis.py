@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,9 +31,16 @@ def list_kpis(
     dataset_id: uuid.UUID | None = None,
     status: str | None = None,
     category: str | None = None,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
-    return kpi_service.list_kpis(db, dataset_id=dataset_id, status=status, category=category)
+    return kpi_service.list_kpis(
+        db,
+        dataset_id=dataset_id,
+        status=status,
+        category=category,
+        include_deleted=include_deleted,
+    )
 
 
 @router.post("/kpis", response_model=KPIResponse, status_code=201)
@@ -45,8 +52,12 @@ def create_kpi_manual(req: KPIManualCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/kpis/{kpi_id}", response_model=KPIResponse)
-def get_kpi(kpi_id: uuid.UUID, db: Session = Depends(get_db)):
-    return kpi_service.get_kpi(db, kpi_id)
+def get_kpi(
+    kpi_id: uuid.UUID,
+    include_deleted: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    return kpi_service.get_kpi(db, kpi_id, include_deleted=include_deleted)
 
 
 @router.put("/kpis/{kpi_id}", response_model=KPIResponse)
@@ -78,8 +89,13 @@ def reject_kpi(kpi_id: uuid.UUID, req: KPIRejectRequest, db: Session = Depends(g
 
 
 @router.get("/kpis/{kpi_id}/snapshots", response_model=list[KPISnapshotResponse])
-def list_snapshots(kpi_id: uuid.UUID, limit: int = 100, db: Session = Depends(get_db)):
-    return kpi_service.list_snapshots(db, kpi_id, limit=limit)
+def list_snapshots(
+    kpi_id: uuid.UUID,
+    limit: int = 100,
+    include_deleted: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    return kpi_service.list_snapshots(db, kpi_id, limit=limit, include_deleted=include_deleted)
 
 
 @router.post("/kpis/{kpi_id}/recompute", response_model=KPISnapshotResponse)

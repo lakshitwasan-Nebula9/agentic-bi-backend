@@ -1,7 +1,7 @@
 import logging
 import time
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -11,11 +11,20 @@ from sqlalchemy.orm import Session
 from app.agents.messaging import AgentPublisher
 from app.crud import dataset as dataset_crud
 from app.crud import sync_log as sync_log_crud
+from app.models.approval_request import ApprovalRequest
 from app.models.dataset import Dataset, DatasetRecord
+from app.models.decision import DecisionRecord
+from app.models.embeddings import EmbeddingRecord
+from app.models.explanation import InsightExplanation
+from app.models.insight import InsightEvent
+from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
+from app.models.schema_metadata import SchemaMetadata
 from app.models.sync_log import SyncLog
 from app.schemas.dataset import DatasetCreate
 from app.services import connector_service
 from app.services.connector_service import get_connector_or_404
+
+SOFT_DELETE_WINDOW_DAYS = 7
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +49,17 @@ def _schema_fingerprint(rows: list[dict[str, Any]]) -> dict[str, str]:
     return {column: type(value).__name__ for column, value in rows[0].items()}
 
 
-def get_dataset_or_404(db: Session, dataset_id: uuid.UUID) -> Dataset:
-    dataset = dataset_crud.get_dataset(db, dataset_id)
+def get_dataset_or_404(
+    db: Session, dataset_id: uuid.UUID, include_deleted: bool = False
+) -> Dataset:
+    dataset = dataset_crud.get_dataset(db, dataset_id, include_deleted=include_deleted)
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     return dataset
 
 
-def list_datasets(db: Session) -> list[Dataset]:
-    return dataset_crud.list_datasets(db)
+def list_datasets(db: Session, include_deleted: bool = False) -> list[Dataset]:
+    return dataset_crud.list_datasets(db, include_deleted=include_deleted)
 
 
 def create_dataset(db: Session, payload: DatasetCreate, created_by: uuid.UUID) -> Dataset:
@@ -71,7 +82,161 @@ def create_dataset(db: Session, payload: DatasetCreate, created_by: uuid.UUID) -
 
 def delete_dataset(db: Session, dataset_id: uuid.UUID) -> None:
     dataset = get_dataset_or_404(db, dataset_id)
-    dataset_crud.delete_dataset(db, dataset)
+    now = datetime.now(UTC)
+    stamp = {"is_deleted": True, "deleted_at": now}
+
+    kpi_ids = [
+        row[0]
+        for row in db.query(KPIDefinition.id)
+        .filter(KPIDefinition.dataset_id == dataset_id, KPIDefinition.is_deleted.is_(False))
+        .all()
+    ]
+    if kpi_ids:
+        insight_ids = [
+            row[0]
+            for row in db.query(InsightEvent.id)
+            .filter(InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(False))
+            .all()
+        ]
+        if insight_ids:
+            db.query(InsightExplanation).filter(
+                InsightExplanation.insight_event_id.in_(insight_ids),
+                InsightExplanation.is_deleted.is_(False),
+            ).update(stamp, synchronize_session=False)
+            db.query(DecisionRecord).filter(
+                DecisionRecord.insight_event_id.in_(insight_ids),
+                DecisionRecord.is_deleted.is_(False),
+            ).update(stamp, synchronize_session=False)
+        db.query(InsightEvent).filter(
+            InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+        db.query(KPISnapshot).filter(
+            KPISnapshot.kpi_id.in_(kpi_ids), KPISnapshot.is_deleted.is_(False)
+        ).update(stamp, synchronize_session=False)
+        db.query(KPIVersion).filter(KPIVersion.kpi_id.in_(kpi_ids)).update(
+            stamp, synchronize_session=False
+        )
+        db.query(EmbeddingRecord).filter(
+            EmbeddingRecord.entity_type == "kpi_definition",
+            EmbeddingRecord.entity_id.in_([str(kid) for kid in kpi_ids]),
+            EmbeddingRecord.is_deleted.is_(False),
+        ).update(stamp, synchronize_session=False)
+        db.query(ApprovalRequest).filter(
+            ApprovalRequest.entity_type == "kpi",
+            ApprovalRequest.entity_id.in_(kpi_ids),
+            ApprovalRequest.is_deleted.is_(False),
+        ).update(stamp, synchronize_session=False)
+
+    db.query(KPIDefinition).filter(
+        KPIDefinition.dataset_id == dataset_id, KPIDefinition.is_deleted.is_(False)
+    ).update(stamp, synchronize_session=False)
+
+    table_names = [
+        row[0]
+        for row in db.query(SchemaMetadata.table_name)
+        .filter(SchemaMetadata.dataset_id == dataset_id, SchemaMetadata.is_deleted.is_(False))
+        .all()
+    ]
+    if table_names:
+        db.query(EmbeddingRecord).filter(
+            EmbeddingRecord.entity_type == "schema_description",
+            EmbeddingRecord.entity_id.in_(table_names),
+            EmbeddingRecord.is_deleted.is_(False),
+        ).update(stamp, synchronize_session=False)
+    db.query(SchemaMetadata).filter(
+        SchemaMetadata.dataset_id == dataset_id, SchemaMetadata.is_deleted.is_(False)
+    ).update(stamp, synchronize_session=False)
+
+    db.query(DatasetRecord).filter(
+        DatasetRecord.dataset_id == dataset_id, DatasetRecord.is_deleted.is_(False)
+    ).update(stamp, synchronize_session=False)
+
+    dataset.is_deleted = True
+    dataset.deleted_at = now
+    db.commit()
+
+
+def restore_dataset(db: Session, dataset_id: uuid.UUID) -> Dataset:
+    dataset = get_dataset_or_404(db, dataset_id, include_deleted=True)
+    if not dataset.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Dataset is not deleted"
+        )
+    if dataset.deleted_at is None or dataset.deleted_at < datetime.now(UTC) - timedelta(
+        days=SOFT_DELETE_WINDOW_DAYS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Restore window has expired (7 days). Data has been permanently removed.",
+        )
+
+    restore = {"is_deleted": False, "deleted_at": None}
+
+    kpi_ids = [
+        row[0]
+        for row in db.query(KPIDefinition.id)
+        .filter(KPIDefinition.dataset_id == dataset_id, KPIDefinition.is_deleted.is_(True))
+        .all()
+    ]
+    if kpi_ids:
+        insight_ids = [
+            row[0]
+            for row in db.query(InsightEvent.id)
+            .filter(InsightEvent.kpi_id.in_(kpi_ids), InsightEvent.is_deleted.is_(True))
+            .all()
+        ]
+        if insight_ids:
+            db.query(InsightExplanation).filter(
+                InsightExplanation.insight_event_id.in_(insight_ids)
+            ).update(restore, synchronize_session=False)
+            db.query(DecisionRecord).filter(
+                DecisionRecord.insight_event_id.in_(insight_ids)
+            ).update(restore, synchronize_session=False)
+        db.query(InsightEvent).filter(InsightEvent.kpi_id.in_(kpi_ids)).update(
+            restore, synchronize_session=False
+        )
+        db.query(KPISnapshot).filter(KPISnapshot.kpi_id.in_(kpi_ids)).update(
+            restore, synchronize_session=False
+        )
+        db.query(KPIVersion).filter(KPIVersion.kpi_id.in_(kpi_ids)).update(
+            restore, synchronize_session=False
+        )
+        db.query(EmbeddingRecord).filter(
+            EmbeddingRecord.entity_type == "kpi_definition",
+            EmbeddingRecord.entity_id.in_([str(kid) for kid in kpi_ids]),
+        ).update(restore, synchronize_session=False)
+        db.query(ApprovalRequest).filter(
+            ApprovalRequest.entity_type == "kpi",
+            ApprovalRequest.entity_id.in_(kpi_ids),
+        ).update(restore, synchronize_session=False)
+
+    db.query(KPIDefinition).filter(KPIDefinition.dataset_id == dataset_id).update(
+        restore, synchronize_session=False
+    )
+
+    table_names = [
+        row[0]
+        for row in db.query(SchemaMetadata.table_name)
+        .filter(SchemaMetadata.dataset_id == dataset_id)
+        .all()
+    ]
+    if table_names:
+        db.query(EmbeddingRecord).filter(
+            EmbeddingRecord.entity_type == "schema_description",
+            EmbeddingRecord.entity_id.in_(table_names),
+        ).update(restore, synchronize_session=False)
+    db.query(SchemaMetadata).filter(SchemaMetadata.dataset_id == dataset_id).update(
+        restore, synchronize_session=False
+    )
+    db.query(DatasetRecord).filter(DatasetRecord.dataset_id == dataset_id).update(
+        restore, synchronize_session=False
+    )
+
+    dataset.is_deleted = False
+    dataset.deleted_at = None
+    db.commit()
+    db.refresh(dataset)
+    return dataset
 
 
 def list_records(

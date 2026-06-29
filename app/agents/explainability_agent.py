@@ -9,6 +9,7 @@ Deterministic — no LLM call.
 Run as a standalone worker:  python -m app.agents.explainability_agent
 """
 
+import asyncio
 import logging
 import uuid
 
@@ -46,7 +47,7 @@ class ExplainabilityAgent(AgentSubscriber):
             if insight is None:
                 logger.warning("InsightEvent %s not found — skipping explanation", insight_id)
                 return
-            explanation = build_explanation(db, insight)
+            explanation = asyncio.run(build_explanation(db, insight))
             logger.info(
                 "Built explanation for insight %s (confidence=%d)",
                 insight_id,

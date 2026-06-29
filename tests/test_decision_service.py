@@ -287,9 +287,8 @@ def test_make_decision_p1_sets_awaiting_approval():
         patch("app.services.decision_service.get_kpi", return_value=kpi),
         patch("app.services.decision_service.recommend", new=AsyncMock(return_value=None)),
     ):
-        # db.get returns the event
         db = MagicMock()
-        db.get.return_value = event
+        db.query.return_value.filter.return_value.first.return_value = event
 
         result = asyncio.run(decision_service.make_decision(db, insight_id))
 
@@ -332,7 +331,7 @@ def test_make_decision_p3_sets_decided():
         patch("app.services.decision_service.recommend", new=AsyncMock(return_value=None)),
     ):
         db = MagicMock()
-        db.get.return_value = event
+        db.query.return_value.filter.return_value.first.return_value = event
 
         result = asyncio.run(decision_service.make_decision(db, insight_id))
 
@@ -363,7 +362,7 @@ def test_make_decision_returns_none_for_missing_insight():
     with patch("app.services.decision_service.decision_crud") as mock_crud:
         mock_crud.get_decision_by_insight.return_value = None
         db = MagicMock()
-        db.get.return_value = None
+        db.query.return_value.filter.return_value.first.return_value = None
         result = asyncio.run(decision_service.make_decision(db, uuid.uuid4()))
 
     assert result is None

@@ -37,8 +37,11 @@ def create_kpi(db: Session, kpi: KPICreate) -> KPIDefinition:
     return record
 
 
-def get_kpi(db: Session, kpi_id: uuid.UUID) -> KPIDefinition | None:
-    return db.get(KPIDefinition, kpi_id)
+def get_kpi(db: Session, kpi_id: uuid.UUID, include_deleted: bool = False) -> KPIDefinition | None:
+    q = db.query(KPIDefinition).filter(KPIDefinition.id == kpi_id)
+    if not include_deleted:
+        q = q.filter(KPIDefinition.is_deleted.is_(False))
+    return q.first()
 
 
 def list_kpis(
@@ -46,8 +49,11 @@ def list_kpis(
     dataset_id: uuid.UUID | None = None,
     status: str | None = None,
     category: str | None = None,
+    include_deleted: bool = False,
 ) -> list[KPIDefinition]:
     q = db.query(KPIDefinition)
+    if not include_deleted:
+        q = q.filter(KPIDefinition.is_deleted.is_(False))
     if dataset_id is not None:
         q = q.filter(KPIDefinition.dataset_id == dataset_id)
     if status is not None:
@@ -58,7 +64,12 @@ def list_kpis(
 
 
 def list_categories(db: Session) -> list[str]:
-    rows = db.query(KPIDefinition.category).distinct().all()
+    rows = (
+        db.query(KPIDefinition.category)
+        .filter(KPIDefinition.is_deleted.is_(False))
+        .distinct()
+        .all()
+    )
     return sorted({r[0] for r in rows if r[0]})
 
 
@@ -137,11 +148,14 @@ def create_snapshot(
     return snapshot
 
 
-def list_snapshots(db: Session, kpi_id: uuid.UUID, limit: int = 100) -> list[KPISnapshot]:
+def list_snapshots(
+    db: Session, kpi_id: uuid.UUID, limit: int = 100, include_deleted: bool = False
+) -> list[KPISnapshot]:
+    q = db.query(KPISnapshot).filter(KPISnapshot.kpi_id == kpi_id)
+    if not include_deleted:
+        q = q.filter(KPISnapshot.is_deleted.is_(False))
     return (
-        db.query(KPISnapshot)
-        .filter(KPISnapshot.kpi_id == kpi_id)
-        .order_by(KPISnapshot.period_start.asc().nulls_last(), KPISnapshot.computed_at.asc())
+        q.order_by(KPISnapshot.period_start.asc().nulls_last(), KPISnapshot.computed_at.asc())
         .limit(limit)
         .all()
     )

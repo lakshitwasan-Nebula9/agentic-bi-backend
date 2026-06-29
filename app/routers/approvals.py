@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -64,6 +64,7 @@ def list_approval_requests(
     entity_type: str | None = None,
     assigned_role: str | None = None,
     overdue: bool = False,
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     if overdue:
@@ -71,12 +72,22 @@ def list_approval_requests(
         for ar in ars:
             _publish_overdue(ar)
         return ars
-    return list_approvals(db, status=status, entity_type=entity_type, assigned_role=assigned_role)
+    return list_approvals(
+        db,
+        status=status,
+        entity_type=entity_type,
+        assigned_role=assigned_role,
+        include_deleted=include_deleted,
+    )
 
 
 @router.get("/approvals/{ar_id}", response_model=ApprovalRequestResponse)
-def get_approval(ar_id: uuid.UUID, db: Session = Depends(get_db)):
-    ar = get_approval_request(db, ar_id)
+def get_approval(
+    ar_id: uuid.UUID,
+    include_deleted: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    ar = get_approval_request(db, ar_id, include_deleted=include_deleted)
     if ar is None:
         raise HTTPException(status_code=404, detail=f"ApprovalRequest {ar_id} not found")
     return ar

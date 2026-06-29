@@ -15,6 +15,9 @@ class InsightExplanationResponse(BaseModel):
     source_dataset: str | None = None
     data_freshness_at: datetime | None = None
     kpi_formula: str | None = None
+    llm_explanation: str | None = None
+    business_drivers: list | None = None
+    recommended_actions: list | None = None
     # Passthrough of the insight narrative so the modal can render everything in one call.
     rationale: str | None = None
     created_at: datetime

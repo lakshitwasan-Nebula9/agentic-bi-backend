@@ -5,7 +5,7 @@ construction creates consumer groups, which would require a broker).
 """
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.explainability_agent import ExplainabilityAgent
 from app.agents.messaging import AgentEvent
@@ -29,9 +29,11 @@ def test_handle_event_builds_explanation_for_insight():
 
     with (
         patch("app.agents.explainability_agent.SessionLocal", return_value=db),
-        patch("app.agents.explainability_agent.build_explanation") as mock_build,
+        patch(
+            "app.agents.explainability_agent.build_explanation",
+            new=AsyncMock(return_value=MagicMock(confidence_score=91)),
+        ) as mock_build,
     ):
-        mock_build.return_value = MagicMock(confidence_score=91)
         ExplainabilityAgent.handle_event(MagicMock(), _event({"id": str(insight_id)}))
 
     mock_build.assert_called_once_with(db, insight)

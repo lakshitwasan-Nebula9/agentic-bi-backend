@@ -30,8 +30,10 @@ _FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 
+# Allow optional leading open-parens so parenthesised expressions like
+# "(SUM(a) - SUM(b)) / COUNT(c)" pass — the forbidden-keyword check still applies.
 _ALLOWED_AGGREGATE_PREFIX = re.compile(
-    r"^\s*(SUM|COUNT|AVG|MIN|MAX|ROUND|COALESCE|CASE)\s*[\s(]",
+    r"^\s*\(*\s*(SUM|COUNT|AVG|MIN|MAX|ROUND|COALESCE|CASE)\s*[\s(]",
     re.IGNORECASE,
 )
 
@@ -39,6 +41,52 @@ _ALLOWED_AGGREGATE_PREFIX = re.compile(
 _NUMERIC_TYPES = {"int", "float", "Decimal", "complex"}
 _BOOL_TYPES = {"bool"}
 _TEXT_TYPES = {"str"}
+
+# Column names that hint at a date/time dimension, used to rank candidates when
+# schema_metadata.date_columns is empty (LLM schema detection sometimes misses them).
+_DATE_NAME_HINT = re.compile(
+    r"(date|time|timestamp|_at$|created|updated|period|\bday\b|month|year)",
+    re.IGNORECASE,
+)
+
+
+def _infer_date_column(db: Session, dataset_id: uuid.UUID) -> str | None:
+    """Best-effort discovery of a date column when schema_metadata lists none.
+
+    Ranks the dataset's columns by date-like name, then validates each candidate
+    actually casts to ``timestamptz`` against real records (inside a SAVEPOINT so a
+    failed cast doesn't poison the surrounding transaction). Returns the first
+    column that parses, or ``None``.
+    """
+    dataset = get_dataset(db, dataset_id)
+    fingerprint = (dataset.schema_fingerprint if dataset else None) or {}
+    if not fingerprint:
+        return None
+
+    columns = list(fingerprint.keys())
+    named = [c for c in columns if _DATE_NAME_HINT.search(c)]
+    # Fall back to any string-typed column when no name hints match.
+    others = [c for c in columns if fingerprint.get(c) == "str" and c not in named]
+
+    for col in named + others:
+        probe = text(
+            "SELECT (row_data->>:col)::timestamptz "
+            "FROM dataset_records "
+            "WHERE dataset_id = :dataset_id AND is_deleted = false "
+            "  AND row_data->>:col IS NOT NULL "
+            "LIMIT 1"
+        )
+        try:
+            with db.begin_nested():
+                row = db.execute(probe, {"col": col, "dataset_id": str(dataset_id)}).fetchone()
+            if row is not None:
+                logger.info("Inferred date column '%s' for dataset %s", col, dataset_id)
+                return col
+        except Exception:
+            # Cast failed for this column — savepoint rolled back, try the next.
+            continue
+
+    return None
 
 
 def validate_sql_expression(sql_expression: str) -> None:
@@ -130,6 +178,7 @@ def derive_snapshot_period(
         "  MAX((t.row_data->>:col)::timestamp with time zone) AS period_end "
         "FROM dataset_records t "
         "WHERE t.dataset_id = :dataset_id "
+        "  AND t.is_deleted = false "
         "  AND t.row_data->>:col IS NOT NULL"
     )
     try:
@@ -173,13 +222,17 @@ def compute_monthly_snapshots(
     if dataset and dataset.schema_fingerprint:
         column_types = dataset.schema_fingerprint
 
+    # Fall back to schema_fingerprint keys when schema_metadata row is missing
+    if not column_names and column_types:
+        column_names = list(column_types.keys())
+
     substituted = _substitute_columns(kpi.sql_expression, column_names, column_types)
 
     # Discover distinct calendar months present in the dataset
     months_sql = text(
         "SELECT DISTINCT date_trunc('month', (row_data->>:col)::timestamptz) AS month_start "
         "FROM dataset_records "
-        "WHERE dataset_id = :dataset_id AND row_data->>:col IS NOT NULL "
+        "WHERE dataset_id = :dataset_id AND is_deleted = false AND row_data->>:col IS NOT NULL "
         "ORDER BY month_start"
     )
     try:
@@ -199,7 +252,11 @@ def compute_monthly_snapshots(
     existing_period_starts: set[datetime] = {
         row[0]
         for row in db.query(KPISnapshot.period_start)
-        .filter(KPISnapshot.kpi_id == kpi.id, KPISnapshot.period_start.isnot(None))
+        .filter(
+            KPISnapshot.kpi_id == kpi.id,
+            KPISnapshot.period_start.isnot(None),
+            KPISnapshot.is_deleted.is_(False),
+        )
         .all()
     }
 
@@ -230,6 +287,7 @@ def compute_monthly_snapshots(
             f"SELECT {substituted} FROM ("
             f"  SELECT row_data FROM dataset_records "
             f"  WHERE dataset_id = :dataset_id "
+            f"    AND is_deleted = false"
             f"    AND {date_accessor} >= :bucket_start "
             f"    AND {date_accessor} <= :bucket_end"
             f") AS t"
@@ -265,6 +323,13 @@ def snapshot_kpi(db: Session, kpi: KPIDefinition) -> list[KPISnapshot]:
     """
     schema_meta = get_schema_metadata_by_table(db, kpi.table_name)
     date_cols = schema_meta.date_columns if schema_meta else None
+
+    # Schema detection sometimes returns no date columns; infer one from the
+    # records so monthly time-series snapshots still get produced.
+    if not date_cols:
+        inferred = _infer_date_column(db, kpi.dataset_id)
+        if inferred:
+            date_cols = [inferred]
 
     if date_cols:
         date_col = date_cols[0] if isinstance(date_cols, list) else next(iter(date_cols))
@@ -302,10 +367,14 @@ def compute_and_snapshot(
     if dataset and dataset.schema_fingerprint:
         column_types = dataset.schema_fingerprint  # {col_name: python_type_name}
 
+    # Fall back to schema_fingerprint keys when schema_metadata row is missing
+    if not column_names and column_types:
+        column_names = list(column_types.keys())
+
     substituted = _substitute_columns(kpi.sql_expression, column_names, column_types)
     sql = (
         f"SELECT {substituted} FROM "
-        "(SELECT row_data FROM dataset_records WHERE dataset_id = :dataset_id) AS t"
+        "(SELECT row_data FROM dataset_records WHERE dataset_id = :dataset_id AND is_deleted = false) AS t"
     )
 
     try:

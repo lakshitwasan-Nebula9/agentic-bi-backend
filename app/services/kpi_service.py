@@ -20,8 +20,8 @@ from app.schemas.kpi import (
 logger = logging.getLogger(__name__)
 
 
-def _get_or_404(db: Session, kpi_id: uuid.UUID) -> KPIDefinition:
-    kpi = kpi_crud.get_kpi(db, kpi_id)
+def _get_or_404(db: Session, kpi_id: uuid.UUID, include_deleted: bool = False) -> KPIDefinition:
+    kpi = kpi_crud.get_kpi(db, kpi_id, include_deleted=include_deleted)
     if kpi is None:
         raise HTTPException(status_code=404, detail=f"KPI {kpi_id} not found")
     return kpi
@@ -42,7 +42,7 @@ def _enrich(db: Session, kpis: list[KPIDefinition]) -> list[KPIResponse]:
     # All snapshots for the batch, newest first.
     all_snapshots: list[KPISnapshot] = (
         db.query(KPISnapshot)
-        .filter(KPISnapshot.kpi_id.in_(kpi_ids))
+        .filter(KPISnapshot.kpi_id.in_(kpi_ids), KPISnapshot.is_deleted.is_(False))
         .order_by(KPISnapshot.period_start.desc().nulls_last(), KPISnapshot.computed_at.desc())
         .all()
     )
@@ -122,8 +122,8 @@ def _enrich(db: Session, kpis: list[KPIDefinition]) -> list[KPIResponse]:
     return results
 
 
-def get_kpi(db: Session, kpi_id: uuid.UUID) -> KPIResponse:
-    kpi = _get_or_404(db, kpi_id)
+def get_kpi(db: Session, kpi_id: uuid.UUID, include_deleted: bool = False) -> KPIResponse:
+    kpi = _get_or_404(db, kpi_id, include_deleted=include_deleted)
     return _enrich(db, [kpi])[0]
 
 
@@ -132,8 +132,15 @@ def list_kpis(
     dataset_id: uuid.UUID | None = None,
     status: str | None = None,
     category: str | None = None,
+    include_deleted: bool = False,
 ) -> list[KPIResponse]:
-    kpis = kpi_crud.list_kpis(db, dataset_id=dataset_id, status=status, category=category)
+    kpis = kpi_crud.list_kpis(
+        db,
+        dataset_id=dataset_id,
+        status=status,
+        category=category,
+        include_deleted=include_deleted,
+    )
     return _enrich(db, kpis)
 
 
@@ -166,9 +173,11 @@ def reject_kpi(db: Session, kpi_id: uuid.UUID, req: KPIRejectRequest) -> KPIResp
     return _enrich(db, [updated])[0]
 
 
-def list_snapshots(db: Session, kpi_id: uuid.UUID, limit: int = 100) -> list[KPISnapshot]:
-    _get_or_404(db, kpi_id)
-    return kpi_crud.list_snapshots(db, kpi_id, limit=limit)
+def list_snapshots(
+    db: Session, kpi_id: uuid.UUID, limit: int = 100, include_deleted: bool = False
+) -> list[KPISnapshot]:
+    _get_or_404(db, kpi_id, include_deleted=include_deleted)
+    return kpi_crud.list_snapshots(db, kpi_id, limit=limit, include_deleted=include_deleted)
 
 
 def delete_kpi(db: Session, kpi_id: uuid.UUID) -> None:
@@ -181,10 +190,11 @@ def delete_kpi(db: Session, kpi_id: uuid.UUID) -> None:
 
 def create_manual_kpi(db: Session, req: KPIManualCreate) -> KPIDefinition:
     """Create a KPI from the 'Add New KPI' form. Returns the ORM object so the router can create an AR."""
+    from app.crud.dataset import get_dataset
     from app.schemas.kpi import KPICreate
     from app.services.kpi_calculation_service import snapshot_kpi
 
-    dataset = db.get(Dataset, req.dataset_id)
+    dataset = get_dataset(db, req.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail=f"Dataset {req.dataset_id} not found")
     kpi_create = KPICreate(

@@ -34,7 +34,11 @@ def _get_monthly_snapshots_asc(db: Session, kpi_id: uuid.UUID) -> list[KPISnapsh
     """Return monthly snapshots for a KPI in chronological order (oldest first)."""
     return (
         db.query(KPISnapshot)
-        .filter(KPISnapshot.kpi_id == kpi_id, KPISnapshot.period_start.isnot(None))
+        .filter(
+            KPISnapshot.kpi_id == kpi_id,
+            KPISnapshot.period_start.isnot(None),
+            KPISnapshot.is_deleted.is_(False),
+        )
         .order_by(KPISnapshot.period_start.asc())
         .all()
     )
@@ -43,7 +47,11 @@ def _get_monthly_snapshots_asc(db: Session, kpi_id: uuid.UUID) -> list[KPISnapsh
 def _already_detected(db: Session, kpi_id: uuid.UUID, period_start) -> bool:
     return (
         db.query(InsightEvent)
-        .filter(InsightEvent.kpi_id == kpi_id, InsightEvent.period_start == period_start)
+        .filter(
+            InsightEvent.kpi_id == kpi_id,
+            InsightEvent.period_start == period_start,
+            InsightEvent.is_deleted.is_(False),
+        )
         .first()
         is not None
     )
@@ -118,7 +126,9 @@ async def detect_all(db: Session) -> list[InsightEvent]:
     """Run detection across all certified KPIs that have monthly snapshots."""
     kpi_ids = [
         row[0]
-        for row in db.query(KPIDefinition.id).filter(KPIDefinition.status == "certified").all()
+        for row in db.query(KPIDefinition.id)
+        .filter(KPIDefinition.status == "certified", KPIDefinition.is_deleted.is_(False))
+        .all()
     ]
     events: list[InsightEvent] = []
     for kpi_id in kpi_ids:
@@ -134,8 +144,11 @@ def list_insights(
     insight_type: str | None = None,
     is_anomaly: bool | None = None,
     limit: int = 100,
+    include_deleted: bool = False,
 ) -> list[InsightEvent]:
     q = db.query(InsightEvent)
+    if not include_deleted:
+        q = q.filter(InsightEvent.is_deleted.is_(False))
     if kpi_id is not None:
         q = q.filter(InsightEvent.kpi_id == kpi_id)
     if insight_type is not None:

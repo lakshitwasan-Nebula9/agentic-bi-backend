@@ -19,7 +19,11 @@ def upsert_schema_metadata(
     business_questions: list[str],
     dataset_id: uuid.UUID | None = None,
 ) -> SchemaMetadata:
-    record = db.query(SchemaMetadata).filter(SchemaMetadata.table_name == table_name).first()
+    record = (
+        db.query(SchemaMetadata)
+        .filter(SchemaMetadata.table_name == table_name, SchemaMetadata.is_deleted.is_(False))
+        .first()
+    )
 
     if record:
         record.entity_type = entity_type
@@ -54,5 +58,10 @@ def upsert_schema_metadata(
     return record
 
 
-def get_schema_metadata_by_table(db: Session, table_name: str) -> SchemaMetadata | None:
-    return db.query(SchemaMetadata).filter(SchemaMetadata.table_name == table_name).first()
+def get_schema_metadata_by_table(
+    db: Session, table_name: str, include_deleted: bool = False
+) -> SchemaMetadata | None:
+    q = db.query(SchemaMetadata).filter(SchemaMetadata.table_name == table_name)
+    if not include_deleted:
+        q = q.filter(SchemaMetadata.is_deleted.is_(False))
+    return q.first()
