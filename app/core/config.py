@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str | None = None
     GEMINI_LLM_MODEL: str = "gemini-2.0-flash"
+
+    ANTHROPIC_API_KEY: str | None = None
+    COPILOT_LLM_MODEL: str = "claude-haiku-4-5-20251001"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSIONS: int = 384
 
