@@ -6,6 +6,7 @@ from app.routers import (
     approvals,
     auth,
     connectors,
+    copilot,
     dashboards,
     data_quality,
     datasets,
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
+app.include_router(copilot.router, prefix=settings.API_V1_PREFIX)
 app.include_router(decisions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(insights.router, prefix=settings.API_V1_PREFIX)
