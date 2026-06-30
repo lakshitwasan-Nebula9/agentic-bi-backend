@@ -19,7 +19,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE chat_role_enum AS ENUM ('user', 'assistant')")
+    op.execute(
+        "DO $$ BEGIN CREATE TYPE chat_role_enum AS ENUM ('user', 'assistant'); "
+        "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+    )
 
     op.create_table(
         "chat_sessions",
@@ -29,7 +32,6 @@ def upgrade() -> None:
             sa.dialects.postgresql.UUID(as_uuid=True),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("title", sa.String(200), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
@@ -47,7 +49,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_chat_sessions_user_id", "chat_sessions", ["user_id"])
+    op.create_index("ix_chat_sessions_user_id", "chat_sessions", ["user_id"], if_not_exists=True)
 
     op.create_table(
         "chat_messages",
@@ -74,8 +76,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_chat_messages_session_id", "chat_messages", ["session_id"])
-    op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"])
+    op.create_index(
+        "ix_chat_messages_session_id", "chat_messages", ["session_id"], if_not_exists=True
+    )
+    op.create_index(
+        "ix_chat_messages_created_at", "chat_messages", ["created_at"], if_not_exists=True
+    )
 
 
 def downgrade() -> None:
