@@ -49,6 +49,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # Second throwaway sample-data source (retail sales domain) so the app can
+  # register two connectors at once. Not the app DB — same role as `db`.
+  db2:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: retail_analytics
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d retail_analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     ports:
@@ -63,4 +81,5 @@ services:
 
 volumes:
   postgres_data:
+  postgres_data_2:
   redis_data:
