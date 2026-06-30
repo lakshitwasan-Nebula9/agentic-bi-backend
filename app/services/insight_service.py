@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.agents.insight_agent import narrate
 from app.agents.messaging import INSIGHT_DETECTED, AgentPublisher
+from app.core.database import SessionLocal
 from app.crud.kpi import get_kpi
+from app.models.dataset import Dataset
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot
 from app.schemas.insight import InsightEventResponse
@@ -130,12 +132,52 @@ async def detect_all(db: Session) -> list[InsightEvent]:
         .filter(KPIDefinition.status == "certified", KPIDefinition.is_deleted.is_(False))
         .all()
     ]
+    return await _detect_for_kpi_ids(db, kpi_ids)
+
+
+async def detect_for_connector(db: Session, connector_id: uuid.UUID) -> list[InsightEvent]:
+    """Run detection across the certified KPIs reachable from a connector's datasets."""
+    kpi_ids = [
+        row[0]
+        for row in db.query(KPIDefinition.id)
+        .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
+        .filter(
+            Dataset.connector_id == connector_id,
+            Dataset.is_deleted.is_(False),
+            KPIDefinition.status == "certified",
+            KPIDefinition.is_deleted.is_(False),
+        )
+        .all()
+    ]
+    return await _detect_for_kpi_ids(db, kpi_ids)
+
+
+async def _detect_for_kpi_ids(db: Session, kpi_ids: list[uuid.UUID]) -> list[InsightEvent]:
     events: list[InsightEvent] = []
     for kpi_id in kpi_ids:
         event = await detect_for_kpi(db, kpi_id)
         if event is not None:
             events.append(event)
     return events
+
+
+async def run_detection_bg(connector_id: uuid.UUID | None = None) -> None:
+    """Background entrypoint: open a fresh session and run detection.
+
+    Scoped to a connector's certified KPIs when given, otherwise all certified
+    KPIs. Used as a FastAPI background task (e.g. on dashboard creation), so it
+    owns its session and never propagates errors to the request.
+    """
+    db = SessionLocal()
+    try:
+        if connector_id is not None:
+            await detect_for_connector(db, connector_id)
+        else:
+            await detect_all(db)
+    except Exception:  # noqa: BLE001
+        logger.warning("Background insight detection failed", exc_info=True)
+    finally:
+        db.close()
 
 
 def list_insights(

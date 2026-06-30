@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,7 +16,7 @@ from app.schemas.dashboard import (
     WidgetResponse,
     WidgetUpdate,
 )
-from app.services import dashboard_service
+from app.services import dashboard_service, insight_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -24,10 +24,15 @@ router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 @router.post("", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED)
 def create_dashboard(
     payload: DashboardCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.create_dashboard(db, payload, owner_id=current_user.id)
+    dashboard = dashboard_service.create_dashboard(db, payload, owner_id=current_user.id)
+    # Kick off a fresh insight-detection pass so the new dashboard surfaces
+    # up-to-date KPI insights — scoped to the chosen connector when given.
+    background_tasks.add_task(insight_service.run_detection_bg, payload.connector_id)
+    return dashboard
 
 
 @router.get("", response_model=list[DashboardResponse])

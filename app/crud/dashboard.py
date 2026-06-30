@@ -54,6 +54,16 @@ def create_widget(db: Session, widget: DashboardWidget) -> DashboardWidget:
     return widget
 
 
+def create_widgets(db: Session, widgets: list[DashboardWidget]) -> list[DashboardWidget]:
+    if not widgets:
+        return []
+    db.add_all(widgets)
+    db.commit()
+    for widget in widgets:
+        db.refresh(widget)
+    return widgets
+
+
 def update_widget(db: Session, widget: DashboardWidget, updates: dict) -> DashboardWidget:
     for field, value in updates.items():
         setattr(widget, field, value)

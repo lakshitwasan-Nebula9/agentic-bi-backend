@@ -52,6 +52,9 @@ class DashboardCreate(BaseModel):
     name: str
     description: str | None = None
     is_default: bool = False
+    # When set, the new dashboard is preconfigured with widgets built from this
+    # connector's most recently certified KPIs. Empty → blank dashboard.
+    connector_id: uuid.UUID | None = None
 
 
 class DashboardUpdate(BaseModel):
