@@ -19,11 +19,6 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "DO $$ BEGIN CREATE TYPE chat_role_enum AS ENUM ('user', 'assistant'); "
-        "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-    )
-
     op.create_table(
         "chat_sessions",
         sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True),
@@ -60,11 +55,7 @@ def upgrade() -> None:
             sa.ForeignKey("chat_sessions.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column(
-            "role",
-            sa.Enum("user", "assistant", name="chat_role_enum", create_type=False),
-            nullable=False,
-        ),
+        sa.Column("role", sa.String(10), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("intent", sa.String(30), nullable=True),
         sa.Column("screen_context", sa.dialects.postgresql.JSONB(), nullable=True),
@@ -87,4 +78,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("chat_messages")
     op.drop_table("chat_sessions")
-    op.execute("DROP TYPE IF EXISTS chat_role_enum")

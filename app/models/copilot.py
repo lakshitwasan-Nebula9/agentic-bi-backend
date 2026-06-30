@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,10 +59,7 @@ class ChatMessage(Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[str] = mapped_column(
-        Enum(ChatRoleEnum, name="chat_role_enum", create_type=True),
-        nullable=False,
-    )
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # Classified intent — only set on assistant messages
     intent: Mapped[str | None] = mapped_column(String(30), nullable=True)
