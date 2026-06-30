@@ -9,6 +9,7 @@ No semantic search — the frontend told us exactly what they're looking at.
 import logging
 import uuid
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.dashboard import Dashboard, DashboardWidget
@@ -349,19 +350,49 @@ def _dashboard_context(
                 )
             )
 
-    # Fetch insights server-side for all KPIs on this dashboard.
-    # visible_insight_ids from the frontend is used as an additional filter if provided,
-    # but we never rely on it being present.
+    # Fetch insights.
+    # Priority 1: frontend sent stable UUIDs via visible_insight_ids — use them directly.
+    # Priority 2: resolved KPI IDs from widget config scan.
+    # Priority 3: join dashboard_widgets config JSONB to find any linked KPI IDs we missed.
     insight_lines = []
-    if resolved_kpi_ids:
+    if visible_insight_ids:
+        insight_q = (
+            db.query(InsightEvent)
+            .filter(InsightEvent.id.in_(visible_insight_ids))
+            .order_by(InsightEvent.created_at.desc())
+        )
+    elif resolved_kpi_ids:
         insight_q = (
             db.query(InsightEvent)
             .filter(InsightEvent.kpi_id.in_(resolved_kpi_ids))
             .order_by(InsightEvent.created_at.desc())
             .limit(20)
         )
-        if visible_insight_ids:
-            insight_q = db.query(InsightEvent).filter(InsightEvent.id.in_(visible_insight_ids))
+    else:
+        # Fallback: pull KPI IDs from widget config JSONB directly via SQL
+        kpi_ids_from_widgets = (
+            db.execute(
+                text(
+                    "SELECT DISTINCT (config->>'kpi_id')::uuid "
+                    "FROM dashboard_widgets "
+                    "WHERE dashboard_id = :did AND config->>'kpi_id' IS NOT NULL"
+                ),
+                {"did": str(dashboard_id)},
+            )
+            .scalars()
+            .all()
+        )
+        if kpi_ids_from_widgets:
+            insight_q = (
+                db.query(InsightEvent)
+                .filter(InsightEvent.kpi_id.in_(kpi_ids_from_widgets))
+                .order_by(InsightEvent.created_at.desc())
+                .limit(20)
+            )
+        else:
+            insight_q = None
+
+    if insight_q is not None:
         for ev in insight_q.all():
             severity = ev.llm_severity or "info"
             title = ev.llm_title or ev.insight_type
