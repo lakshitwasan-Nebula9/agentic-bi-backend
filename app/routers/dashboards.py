@@ -40,7 +40,7 @@ def list_dashboards(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.list_dashboards(db, owner_id=current_user.id)
+    return dashboard_service.list_dashboards(db, current_user)
 
 
 @router.get("/{dashboard_id}", response_model=DashboardDetailResponse)
@@ -49,7 +49,7 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.get_owned_dashboard_or_404(db, dashboard_id, owner_id=current_user.id)
+    return dashboard_service.get_viewable_dashboard_or_404(db, dashboard_id, current_user)
 
 
 @router.patch("/{dashboard_id}", response_model=DashboardResponse)
