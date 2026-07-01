@@ -37,10 +37,5 @@ class DecisionRecordResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DecisionApproveRequest(BaseModel):
-    approver_id: uuid.UUID
-
-
 class DecisionRejectRequest(BaseModel):
-    approver_id: uuid.UUID
     reason: str

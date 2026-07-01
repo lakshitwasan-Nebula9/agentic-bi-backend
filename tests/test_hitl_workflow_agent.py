@@ -97,16 +97,38 @@ def test_rejection_at_any_stage_rejects_kpi_and_closes_ar():
     assert outcome.event_payload["reason"] == "Formula is wrong"
 
 
-def test_wrong_role_raises_403_on_approve():
+def test_junior_role_raises_403_on_approve():
+    # Rank-based guard: a role less senior than the stage's assigned role is denied.
     db = MagicMock()
-    ar = _make_ar(stage="analyst_review")
+    ar = _make_ar(stage="certification_review")  # assigned executive
     actor_id = uuid.uuid4()
 
     with patch("app.services.hitl_workflow_service.get_approval_request", return_value=ar):
         with pytest.raises(HTTPException) as exc_info:
-            process_approval(db, ar.id, actor_id, "executive")
+            process_approval(db, ar.id, actor_id, "analyst")
 
     assert exc_info.value.status_code == 403
+
+
+def test_senior_role_can_action_lower_assigned_stage():
+    # Rank-based guard: a more senior role may action a stage assigned to a junior role.
+    db = MagicMock()
+    ar = _make_ar(stage="certification_review")
+    ar.assigned_role = "manager"
+    actor_id = uuid.uuid4()
+    kpi = MagicMock()
+    kpi.id = ar.entity_id
+
+    with (
+        patch("app.services.hitl_workflow_service.get_approval_request", return_value=ar),
+        patch("app.services.hitl_workflow_service.kpi_crud.get_kpi", return_value=kpi),
+        patch("app.services.hitl_workflow_service.kpi_crud.certify_kpi") as mock_certify,
+        patch("app.services.hitl_workflow_service.close_approval"),
+    ):
+        outcome = process_approval(db, ar.id, actor_id, "executive")
+
+    mock_certify.assert_called_once_with(db, kpi, certified_by=actor_id)
+    assert outcome.event_type == "kpi_certified"
 
 
 def test_wrong_role_raises_403_on_reject():

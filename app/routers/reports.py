@@ -20,7 +20,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
 
-GENERATE_ROLES = (UserRole.ANALYST, UserRole.MANAGER, UserRole.EXECUTIVE)
+GENERATE_ROLES = (UserRole.MANAGER, UserRole.EXECUTIVE)
 
 
 async def _run_generation(report_id: uuid.UUID, title: str, period_label: str) -> None:

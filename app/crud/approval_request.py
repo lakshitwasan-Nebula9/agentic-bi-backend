@@ -14,7 +14,9 @@ STAGE_SEQUENCE = [
 STAGE_ROLES: dict[str, str] = {
     # "analyst_review": "analyst",
     # "business_owner_review": "business_owner",
-    "certification_review": "executive",
+    # Managers own KPI certification (Manager+ can action; see hitl_workflow_service
+    # rank-based check). Matches the direct /kpis/{id}/certify guard.
+    "certification_review": "manager",
 }
 
 

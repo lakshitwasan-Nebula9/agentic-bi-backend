@@ -40,7 +40,7 @@ def test_google_login_creates_new_analyst_user(monkeypatch):
     body = me.json()
     assert body["email"] == email
     assert body["role"] == "analyst"
-    assert body["is_admin"] is False
+    assert "is_admin" not in body
 
 
 def test_google_login_links_existing_local_account(monkeypatch):

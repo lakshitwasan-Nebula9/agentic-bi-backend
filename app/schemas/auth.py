@@ -32,5 +32,4 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str | None
     role: UserRole
-    is_admin: bool
     is_active: bool

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.crud import user as user_crud
-from app.models.user import User, UserRole
+from app.models.user import ROLE_RANK, User, UserRole
 from app.services.auth_service import decode_access_token
 
 bearer_scheme = HTTPBearer()
@@ -39,13 +39,26 @@ def get_current_user(
     return user
 
 
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to perform this action",
-        )
-    return current_user
+def require_min_role(minimum: UserRole):
+    """Dependency that requires the caller's role to be at least ``minimum``.
+
+    Uses ``ROLE_RANK`` (lower number = higher authority), so a caller passes
+    when their rank is <= the minimum's rank (i.e. equal or more senior).
+    """
+
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if ROLE_RANK[current_user.role] > ROLE_RANK[minimum]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return current_user
+
+    return dependency
+
+
+require_manager = require_min_role(UserRole.MANAGER)
+require_executive = require_min_role(UserRole.EXECUTIVE)
 
 
 def require_role(*allowed_roles: UserRole):
