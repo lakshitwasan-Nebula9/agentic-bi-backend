@@ -8,6 +8,7 @@ from app.models.embeddings import EmbeddingRecord
 from app.models.explanation import InsightExplanation
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
+from app.models.notification import Notification
 from app.models.org_settings import OrgSettings
 from app.models.report import Report
 from app.models.schema_metadata import SchemaMetadata
@@ -30,6 +31,7 @@ __all__ = [
     "KPIDefinition",
     "KPISnapshot",
     "KPIVersion",
+    "Notification",
     "OrgSettings",
     "Report",
     "SchemaMetadata",
