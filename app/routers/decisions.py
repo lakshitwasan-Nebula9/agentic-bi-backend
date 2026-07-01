@@ -5,11 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_executive, require_manager
 from app.crud import decision as decision_crud
 from app.models.user import User
 from app.schemas.decision import (
-    DecisionApproveRequest,
     DecisionRecordResponse,
     DecisionRejectRequest,
 )
@@ -75,7 +74,7 @@ def get_decision_for_insight(
 async def trigger_decision(
     insight_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_manager),
 ):
     """On-demand: run the decision pipeline for an existing InsightEvent.
 
@@ -90,9 +89,8 @@ async def trigger_decision(
 @router.post("/decisions/{decision_id}/approve", response_model=DecisionRecordResponse)
 def approve_decision(
     decision_id: uuid.UUID,
-    body: DecisionApproveRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_executive),
 ):
     """Approve a P1 decision that is awaiting human sign-off."""
     record = decision_crud.get_decision(db, decision_id)
@@ -107,7 +105,7 @@ def approve_decision(
         db,
         record,
         status="approved",
-        approved_by=body.approver_id,
+        approved_by=current_user.id,
         approved_at=datetime.now(UTC),
     )
 
@@ -117,7 +115,7 @@ def reject_decision(
     decision_id: uuid.UUID,
     body: DecisionRejectRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_executive),
 ):
     """Reject a P1 decision with a mandatory reason."""
     record = decision_crud.get_decision(db, decision_id)
@@ -132,7 +130,7 @@ def reject_decision(
         db,
         record,
         status="rejected",
-        approved_by=body.approver_id,
+        approved_by=current_user.id,
         approved_at=datetime.now(UTC),
         rejection_reason=body.reason,
     )

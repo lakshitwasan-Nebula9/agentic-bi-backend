@@ -25,12 +25,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(*, user_id: uuid.UUID, role: str, is_admin: bool) -> str:
+def create_access_token(*, user_id: uuid.UUID, role: str) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
         "role": role,
-        "is_admin": is_admin,
         "exp": expire,
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -59,7 +58,6 @@ def signup_user(db: Session, payload: SignupRequest) -> User:
         email=payload.email,
         hashed_password=hash_password(payload.password),
         role=UserRole.EXECUTIVE if is_first_user else UserRole.ANALYST,
-        is_admin=is_first_user,
     )
     return user_crud.create_user(db, user)
 
@@ -100,7 +98,6 @@ def login_with_google(db: Session, payload: GoogleLoginRequest) -> User:
                     auth_provider="google",
                     external_subject=google_user.subject,
                     role=UserRole.ANALYST,
-                    is_admin=False,
                 ),
             )
         else:

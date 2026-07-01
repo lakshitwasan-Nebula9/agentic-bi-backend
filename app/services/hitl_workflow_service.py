@@ -26,6 +26,20 @@ from app.crud.approval_request import (
     list_approvals,
 )
 from app.models.approval_request import ApprovalRequest
+from app.models.user import ROLE_RANK, UserRole
+
+
+def _assert_can_action(actor_role: str, assigned_role: str) -> None:
+    """Allow an actor to action a stage only if they are at least as senior as the
+    stage's assigned role (rank-based, so Executive can action a Manager stage)."""
+    if ROLE_RANK[UserRole(actor_role)] > ROLE_RANK[UserRole(assigned_role)]:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Actor role '{actor_role}' cannot action this stage — "
+                f"requires '{assigned_role}' or higher"
+            ),
+        )
 
 
 @dataclass
@@ -69,14 +83,7 @@ def process_approval(
         raise HTTPException(status_code=404, detail=f"ApprovalRequest {ar_id} not found")
     if ar.status != "pending":
         raise HTTPException(status_code=409, detail=f"ApprovalRequest is already {ar.status}")
-    if actor_role != ar.assigned_role:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"Actor role '{actor_role}' cannot action this stage — "
-                f"expected '{ar.assigned_role}'"
-            ),
-        )
+    _assert_can_action(actor_role, ar.assigned_role)
 
     current_idx = STAGE_SEQUENCE.index(ar.current_stage)
     is_final = current_idx == len(STAGE_SEQUENCE) - 1
@@ -118,14 +125,7 @@ def process_rejection(
         raise HTTPException(status_code=404, detail=f"ApprovalRequest {ar_id} not found")
     if ar.status != "pending":
         raise HTTPException(status_code=409, detail=f"ApprovalRequest is already {ar.status}")
-    if actor_role != ar.assigned_role:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"Actor role '{actor_role}' cannot action this stage — "
-                f"expected '{ar.assigned_role}'"
-            ),
-        )
+    _assert_can_action(actor_role, ar.assigned_role)
 
     kpi = kpi_crud.get_kpi(db, ar.entity_id)
     if kpi is None:

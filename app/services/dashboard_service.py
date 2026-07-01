@@ -5,9 +5,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.crud import dashboard as dashboard_crud
+from app.crud import user as user_crud
 from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.dataset import Dataset
 from app.models.kpi import KPIDefinition, KPISnapshot
+from app.models.user import ROLE_RANK, User, UserRole
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardUpdate,
@@ -43,8 +45,27 @@ def get_owned_dashboard_or_404(
     return dashboard
 
 
-def list_dashboards(db: Session, owner_id: uuid.UUID) -> list[Dashboard]:
-    return dashboard_crud.list_dashboards(db, owner_id)
+def _lower_roles(viewer: User) -> list[UserRole]:
+    """Roles strictly less senior than the viewer's (higher ROLE_RANK number)."""
+    return [r for r in UserRole if ROLE_RANK[r] > ROLE_RANK[viewer.role]]
+
+
+def get_viewable_dashboard_or_404(db: Session, dashboard_id: uuid.UUID, viewer: User) -> Dashboard:
+    """View access: the viewer's own dashboards, plus any owned by a strictly
+    lower-ranked user (read-only — writes still go through get_owned_dashboard_or_404)."""
+    dashboard = dashboard_crud.get_dashboard(db, dashboard_id)
+    if dashboard is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+    if dashboard.owner_id == viewer.id:
+        return dashboard
+    owner = user_crud.get_user_by_id(db, dashboard.owner_id)
+    if owner is not None and ROLE_RANK[owner.role] > ROLE_RANK[viewer.role]:
+        return dashboard
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+
+
+def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
+    return dashboard_crud.list_viewable_dashboards(db, viewer.id, _lower_roles(viewer))
 
 
 def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID) -> Dashboard:

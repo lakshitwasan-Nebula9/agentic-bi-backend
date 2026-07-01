@@ -32,12 +32,8 @@ class ApprovalRequestResponse(BaseModel):
 
 
 class ApprovalActionRequest(BaseModel):
-    actor_id: uuid.UUID
-    actor_role: str
     note: str | None = None
 
 
 class ApprovalRejectRequest(BaseModel):
-    actor_id: uuid.UUID
-    actor_role: str
     rejection_reason: str

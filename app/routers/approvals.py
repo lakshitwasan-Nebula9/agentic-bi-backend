@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.agents.messaging import AgentPublisher
 from app.core.database import get_db
+from app.core.security import get_current_user, require_manager
 from app.crud.approval_request import get_approval_request, list_approvals
 from app.crud.kpi import list_kpis
+from app.models.user import User
 from app.schemas.approval_request import (
     ApprovalActionRequest,
     ApprovalRejectRequest,
@@ -27,7 +29,11 @@ class SeedApprovalsRequest(BaseModel):
 
 
 @router.post("/approvals/seed", response_model=list[ApprovalRequestResponse])
-def seed_approvals(req: SeedApprovalsRequest, db: Session = Depends(get_db)):
+def seed_approvals(
+    req: SeedApprovalsRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
+):
     """Create ApprovalRequests for pending_review KPIs. Use when the HITL agent is not running."""
     if req.kpi_ids:
         kpi_ids = req.kpi_ids
@@ -52,6 +58,7 @@ def seed_approvals(req: SeedApprovalsRequest, db: Session = Depends(get_db)):
 def count_approval_requests(
     entity_type: str = "kpi",
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     """Return count of pending approvals — used by the KPI Library HITL banner."""
     pending = list_approvals(db, status="pending", entity_type=entity_type)
@@ -66,6 +73,7 @@ def list_approval_requests(
     overdue: bool = False,
     include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     if overdue:
         ars = svc.get_overdue_approvals(db)
@@ -86,6 +94,7 @@ def get_approval(
     ar_id: uuid.UUID,
     include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     ar = get_approval_request(db, ar_id, include_deleted=include_deleted)
     if ar is None:
@@ -98,8 +107,9 @@ def approve_request(
     ar_id: uuid.UUID,
     req: ApprovalActionRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),
 ):
-    outcome = svc.process_approval(db, ar_id, req.actor_id, req.actor_role, req.note)
+    outcome = svc.process_approval(db, ar_id, current_user.id, current_user.role.value, req.note)
     _maybe_publish(outcome.event_type, outcome.event_payload)
     return outcome.ar
 
@@ -109,8 +119,11 @@ def reject_request(
     ar_id: uuid.UUID,
     req: ApprovalRejectRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),
 ):
-    outcome = svc.process_rejection(db, ar_id, req.actor_id, req.actor_role, req.rejection_reason)
+    outcome = svc.process_rejection(
+        db, ar_id, current_user.id, current_user.role.value, req.rejection_reason
+    )
     _maybe_publish(outcome.event_type, outcome.event_payload)
     return outcome.ar
 

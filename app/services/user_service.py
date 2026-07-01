@@ -4,15 +4,37 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.crud import user as user_crud
-from app.models.user import User, UserRole
-from app.schemas.users import UserUpdateRequest
-
-# Lower rank number = higher authority (EXECUTIVE > MANAGER > ANALYST).
-ROLE_RANK = {UserRole.EXECUTIVE: 0, UserRole.MANAGER: 1, UserRole.ANALYST: 2}
+from app.models.user import ROLE_RANK, User
+from app.schemas.users import UserCreateRequest, UserUpdateRequest
+from app.services.auth_service import hash_password
 
 
 def list_users(db: Session) -> list[User]:
     return user_crud.list_users(db)
+
+
+def create_user(db: Session, payload: UserCreateRequest, current_user: User) -> User:
+    if user_crud.get_user_by_email(db, payload.email) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
+
+    # Same rank rule as update_user: a creator cannot mint a role at or above their own.
+    if ROLE_RANK[current_user.role] >= ROLE_RANK[payload.role]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot create a user at or above your own role level",
+        )
+
+    user = User(
+        email=payload.email,
+        name=payload.name,
+        hashed_password=hash_password(payload.password),
+        auth_provider="local",
+        role=payload.role,
+        is_active=True,
+    )
+    return user_crud.create_user(db, user)
 
 
 def get_user_or_404(db: Session, user_id: uuid.UUID) -> User:
@@ -28,7 +50,7 @@ def update_user(
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admins cannot change their own role, admin status, or active status",
+            detail="You cannot change your own role or active status",
         )
 
     user = get_user_or_404(db, user_id)

@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 from app.core.database import SessionLocal
 from app.main import app
 from app.models.connector import DataConnector
+from app.models.dashboard import Dashboard
 from app.models.dataset import Dataset
 from app.models.kpi import KPIDefinition, KPISnapshot
+from app.models.user import User, UserRole
 
 client = TestClient(app)
 
@@ -21,6 +23,37 @@ def _signup_and_get_token() -> str:
     )
     assert response.status_code == 201
     return response.json()["access_token"]
+
+
+def _signup_role(role: UserRole) -> tuple[str, str]:
+    """Sign up a user, force its role in the DB, return (token, email). The token's
+    subject is the user id and get_current_user re-reads the role from the DB, so
+    no re-login is needed after promotion."""
+    email = f"dash-{role.value}-{uuid.uuid4().hex}@example.com"
+    resp = client.post("/api/v1/auth/signup", json={"email": email, "password": "password123"})
+    assert resp.status_code == 201
+    token = resp.json()["access_token"]
+    if role != UserRole.ANALYST:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.email == email).first()
+            user.role = role
+            db.commit()
+        finally:
+            db.close()
+    return token, email
+
+
+def _cleanup_dashboards_and_users(dashboard_ids: list[str], emails: list[str]) -> None:
+    db = SessionLocal()
+    try:
+        db.query(Dashboard).filter(Dashboard.id.in_(dashboard_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(User).filter(User.email.in_(emails)).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -403,3 +436,65 @@ def test_metric_card_kpis_with_series_promote_to_line_charts(metric_card_series_
     ]
 
     client.delete(f"/api/v1/dashboards/{dashboard_id}", headers=headers)
+
+
+def test_manager_can_view_but_not_edit_analyst_dashboard():
+    analyst_token, analyst_email = _signup_role(UserRole.ANALYST)
+    manager_token, manager_email = _signup_role(UserRole.MANAGER)
+    dash_id = _create_dashboard(_auth_headers(analyst_token), name="Analyst Dash")["id"]
+    try:
+        # Manager (higher rank) can open the analyst's dashboard...
+        got = client.get(f"/api/v1/dashboards/{dash_id}", headers=_auth_headers(manager_token))
+        assert got.status_code == 200
+        # ...and it shows up in the manager's list.
+        listed = client.get("/api/v1/dashboards", headers=_auth_headers(manager_token))
+        assert any(d["id"] == dash_id for d in listed.json())
+        # But view is read-only: writes are still owner-only (404 for non-owner).
+        patched = client.patch(
+            f"/api/v1/dashboards/{dash_id}",
+            headers=_auth_headers(manager_token),
+            json={"name": "Hijacked"},
+        )
+        assert patched.status_code == 404
+        deleted = client.delete(
+            f"/api/v1/dashboards/{dash_id}", headers=_auth_headers(manager_token)
+        )
+        assert deleted.status_code == 404
+    finally:
+        _cleanup_dashboards_and_users([dash_id], [analyst_email, manager_email])
+
+
+def test_analyst_cannot_view_manager_dashboard():
+    manager_token, manager_email = _signup_role(UserRole.MANAGER)
+    analyst_token, analyst_email = _signup_role(UserRole.ANALYST)
+    dash_id = _create_dashboard(_auth_headers(manager_token), name="Manager Dash")["id"]
+    try:
+        got = client.get(f"/api/v1/dashboards/{dash_id}", headers=_auth_headers(analyst_token))
+        assert got.status_code == 404
+        listed = client.get("/api/v1/dashboards", headers=_auth_headers(analyst_token))
+        assert all(d["id"] != dash_id for d in listed.json())
+    finally:
+        _cleanup_dashboards_and_users([dash_id], [manager_email, analyst_email])
+
+
+def test_executive_can_view_manager_and_analyst_dashboards():
+    exec_token, exec_email = _signup_role(UserRole.EXECUTIVE)
+    manager_token, manager_email = _signup_role(UserRole.MANAGER)
+    analyst_token, analyst_email = _signup_role(UserRole.ANALYST)
+    m_dash = _create_dashboard(_auth_headers(manager_token))["id"]
+    a_dash = _create_dashboard(_auth_headers(analyst_token))["id"]
+    try:
+        assert (
+            client.get(
+                f"/api/v1/dashboards/{m_dash}", headers=_auth_headers(exec_token)
+            ).status_code
+            == 200
+        )
+        assert (
+            client.get(
+                f"/api/v1/dashboards/{a_dash}", headers=_auth_headers(exec_token)
+            ).status_code
+            == 200
+        )
+    finally:
+        _cleanup_dashboards_and_users([m_dash, a_dash], [exec_email, manager_email, analyst_email])

@@ -15,6 +15,13 @@ class UserRole(str, enum.Enum):
     ANALYST = "analyst"
 
 
+# Lower rank number = higher authority (EXECUTIVE > MANAGER > ANALYST).
+# Canonical home for the role hierarchy: lives on the model so both routers
+# (via security.py) and pure services (hitl_workflow_service) can import it
+# without creating an import cycle.
+ROLE_RANK = {UserRole.EXECUTIVE: 0, UserRole.MANAGER: 1, UserRole.ANALYST: 2}
+
+
 class User(Base):
     __tablename__ = "users"
 

@@ -1,8 +1,10 @@
 import uuid
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.dashboard import Dashboard, DashboardWidget
+from app.models.user import User, UserRole
 
 
 def get_dashboard(db: Session, dashboard_id: uuid.UUID) -> Dashboard | None:
@@ -18,6 +20,22 @@ def list_dashboards(db: Session, owner_id: uuid.UUID) -> list[Dashboard]:
     return (
         db.query(Dashboard)
         .filter(Dashboard.owner_id == owner_id)
+        .order_by(Dashboard.created_at)
+        .all()
+    )
+
+
+def list_viewable_dashboards(
+    db: Session, viewer_id: uuid.UUID, lower_roles: list[UserRole]
+) -> list[Dashboard]:
+    """Dashboards the viewer owns, plus any owned by a strictly lower-ranked user."""
+    conditions = [Dashboard.owner_id == viewer_id]
+    if lower_roles:
+        conditions.append(User.role.in_(lower_roles))
+    return (
+        db.query(Dashboard)
+        .join(User, Dashboard.owner_id == User.id)
+        .filter(or_(*conditions))
         .order_by(Dashboard.created_at)
         .all()
     )
