@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,15 +17,32 @@ from app.routers import (
     health,
     insights,
     kpis,
+    notifications,
     rag,
     reports,
     schema,
     users,
 )
+from app.services import notification_fanout
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    fanout_task = asyncio.create_task(notification_fanout.run())
+    try:
+        yield
+    finally:
+        fanout_task.cancel()
+        try:
+            await fanout_task
+        except asyncio.CancelledError:
+            pass
+
 
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -43,6 +63,7 @@ app.include_router(connectors.router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(datasets.router, prefix=settings.API_V1_PREFIX)
 app.include_router(data_quality.router, prefix=settings.API_V1_PREFIX)
+app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(rag.router, prefix=settings.API_V1_PREFIX)
 app.include_router(schema.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
