@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="color-scheme" content="light only"/>
+<meta name="supported-color-schemes" content="light only"/>
+<title>{{ report.period_label }} — Analyst Report</title>
+<style>
+  @media (prefers-color-scheme: dark) {
+    body, table, td, th, div, p, span, h1, h2, h3, h4 { background-color: #ffffff !important; color: #111827 !important; }
+    .hdr { background: linear-gradient(135deg,#14532d 0%,#16a34a 100%) !important; }
+    .hdr p, .hdr h1 { color: #ffffff !important; }
+    .subtext { color: #bbf7d0 !important; }
+    .strip-td { background-color: #f0fdf4 !important; }
+    .strip-border { border-right: 1px solid #bbf7d0 !important; }
+    .strip-num { color: #15803d !important; }
+    .muted { color: #9ca3af !important; }
+    .dim { color: #6b7280 !important; }
+    .footer-td { background-color: #f9fafb !important; }
+  }
+</style>
+</head>
+<body bgcolor="#f0f2f5" style="margin:0;padding:0;background-color:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0f2f5">
+  <tr><td align="center" style="padding:32px 16px;" bgcolor="#f0f2f5">
+
+    <table width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="border-radius:8px;overflow:hidden;">
+
+      <!-- HEADER -->
+      <tr>
+        <td class="hdr" bgcolor="#14532d" style="background:linear-gradient(135deg,#14532d 0%,#16a34a 100%);padding:36px 40px;">
+          <span style="display:inline-block;background-color:#15803d;color:#ffffff;font-size:11px;font-weight:bold;padding:3px 10px;border-radius:12px;letter-spacing:0.6px;text-transform:uppercase;">{{ "Weekly" if report.period_type == "weekly" else "Monthly" }} · Analyst</span>
+          <h1 style="margin:10px 0 4px;color:#ffffff;font-size:22px;font-weight:bold;">Data & KPI Summary</h1>
+          <p class="subtext" style="margin:0;color:#bbf7d0;font-size:13px;">{{ report.period_label }}</p>
+        </td>
+      </tr>
+
+      <!-- GREETING -->
+      <tr>
+        <td bgcolor="#ffffff" style="background-color:#ffffff;padding:24px 40px 8px;">
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">Hi <strong style="color:#111827;">{{ report.user_name }}</strong>, here's your {{ report.period_type }} data summary.</p>
+        </td>
+      </tr>
+
+      <!-- SUMMARY STRIP -->
+      <tr>
+        <td bgcolor="#ffffff" style="background-color:#ffffff;padding:8px 40px 24px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-radius:8px;border:1px solid #bbf7d0;overflow:hidden;">
+            <tr>
+              <td class="strip-td strip-border" width="25%" bgcolor="#f0fdf4" style="background-color:#f0fdf4;padding:16px 12px;text-align:center;border-right:1px solid #bbf7d0;">
+                <p class="strip-num" style="margin:0;font-size:24px;font-weight:bold;color:#15803d;">{{ report.kpi_count }}</p>
+                <p style="margin:4px 0 0;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4b5563;">Certified KPIs</p>
+              </td>
+              <td class="strip-td strip-border" width="25%" bgcolor="#f0fdf4" style="background-color:#f0fdf4;padding:16px 12px;text-align:center;border-right:1px solid #bbf7d0;">
+                <p class="strip-num" style="margin:0;font-size:24px;font-weight:bold;color:#15803d;">{{ report.new_insight_count if report.period_type == "weekly" else report.insight_count }}</p>
+                <p style="margin:4px 0 0;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4b5563;">New Insights</p>
+              </td>
+              <td class="strip-td strip-border" width="25%" bgcolor="#f0fdf4" style="background-color:#f0fdf4;padding:16px 12px;text-align:center;border-right:1px solid #bbf7d0;">
+                <p class="strip-num" style="margin:0;font-size:24px;font-weight:bold;color:#15803d;">{{ report.anomaly_count }}</p>
+                <p style="margin:4px 0 0;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4b5563;">Anomalies</p>
+              </td>
+              <td class="strip-td" width="25%" bgcolor="#f0fdf4" style="background-color:#f0fdf4;padding:16px 12px;text-align:center;">
+                {% if report.period_type == "weekly" %}
+                <p class="strip-num" style="margin:0;font-size:24px;font-weight:bold;color:#15803d;">{{ report.pending_kpis|length }}</p>
+                <p style="margin:4px 0 0;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4b5563;">Pending Review</p>
+                {% else %}
+                <p class="strip-num" style="margin:0;font-size:24px;font-weight:bold;color:#15803d;">{{ report.dashboard_count }}</p>
+                <p style="margin:4px 0 0;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#4b5563;">Dashboards</p>
+                {% endif %}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- PENDING KPIs -->
+      {% if report.period_type == "weekly" and report.pending_kpis %}
+      <tr>
+        <td bgcolor="#ffffff" style="background-color:#ffffff;padding:24px 40px;border-top:1px solid #e5e7eb;">
+          <p class="muted" style="margin:0 0 16px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;">KPIs Pending Your Review ({{ report.pending_kpis|length }})</p>
+          {% for k in report.pending_kpis %}
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;">
+            <tr>
+              <td bgcolor="#fffbeb" style="background-color:#fffbeb;padding:12px 16px;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;">
+                <p style="margin:0 0 2px;font-size:13px;font-weight:bold;color:#111827;">{{ k.name }}</p>
+                {% if k.category %}<p class="dim" style="margin:0;font-size:11px;color:#6b7280;">{{ k.category }}</p>{% endif %}
+              </td>
+              <td bgcolor="#fffbeb" style="background-color:#fffbeb;padding:12px 16px;text-align:right;white-space:nowrap;width:110px;border-left:none;">
+                <span style="display:inline-block;background-color:#fef3c7;color:#92400e;font-size:11px;font-weight:bold;padding:3px 9px;border-radius:4px;">Pending Review</span>
+              </td>
+            </tr>
+          </table>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+
+      <!-- KPI PERFORMANCE -->
+      {% if report.kpi_changes or report.kpi_scorecard %}
+      <tr>
+        <td bgcolor="#ffffff" style="background-color:#ffffff;padding:24px 40px;border-top:1px solid #e5e7eb;">
+          <p class="muted" style="margin:0 0 16px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;">{% if report.period_type == "weekly" %}Your KPIs This Week{% else %}KPI Performance This Month{% endif %}</p>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            {% for k in (report.kpi_changes if report.period_type == "weekly" else report.kpi_scorecard) %}
+            <tr>
+              <td bgcolor="#ffffff" style="background-color:#ffffff;padding:11px 0;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;">{{ k.name }}{% if k.category %} <span class="muted" style="color:#9ca3af;font-size:11px;">· {{ k.category }}</span>{% endif %}</td>
+              <td bgcolor="#ffffff" style="background-color:#ffffff;padding:11px 0;font-size:13px;font-weight:bold;color:#111827;border-bottom:1px solid #f3f4f6;text-align:right;width:110px;">{{ k.current_value }}</td>
+              <td bgcolor="#ffffff" style="background-color:#ffffff;padding:11px 0;border-bottom:1px solid #f3f4f6;text-align:right;width:80px;">
+                {% set chg = k.mom_change %}
+                {% if chg is not none %}{% if chg > 0 %}<span style="display:inline-block;background-color:#dcfce7;color:#15803d;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:99px;">+{{ "%.1f"|format(chg) }}%</span>{% elif chg < 0 %}<span style="display:inline-block;background-color:#fee2e2;color:#b91c1c;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:99px;">{{ "%.1f"|format(chg) }}%</span>{% else %}<span style="display:inline-block;background-color:#f3f4f6;color:#6b7280;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:99px;">0%</span>{% endif %}{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+        </td>
+      </tr>
+      {% endif %}
+
+      <!-- INSIGHTS / ANOMALIES -->
+      {% set items = report.anomalies if report.period_type == "weekly" else report.insights %}
+      {% if items %}
+      <tr>
+        <td bgcolor="#ffffff" style="background-color:#ffffff;padding:24px 40px;border-top:1px solid #e5e7eb;">
+          <p class="muted" style="margin:0 0 16px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;">{% if report.period_type == "weekly" %}New Insights & Anomalies{% else %}Insights This Month{% endif %}</p>
+          {% for item in items %}
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;">
+            <tr>
+              <td width="18" valign="top" bgcolor="#ffffff" style="background-color:#ffffff;padding-top:4px;">
+                <table width="10" cellpadding="0" cellspacing="0" border="0"><tr><td width="10" height="10" bgcolor="{% if item.severity == 'critical' %}#dc2626{% elif item.severity == 'warning' %}#d97706{% else %}#0891b2{% endif %}" style="background-color:{% if item.severity == 'critical' %}#dc2626{% elif item.severity == 'warning' %}#d97706{% else %}#0891b2{% endif %};border-radius:50%;font-size:1px;line-height:1px;">&nbsp;</td></tr></table>
+              </td>
+              <td bgcolor="#ffffff" style="background-color:#ffffff;padding-left:8px;">
+                <p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#111827;line-height:1.4;">{{ item.title }}{% if item.kpi_name %} <span class="muted" style="color:#9ca3af;font-weight:normal;">· {{ item.kpi_name }}</span>{% endif %}</p>
+                {% if item.summary %}<p class="dim" style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;">{{ item.summary }}</p>{% endif %}
+              </td>
+            </tr>
+          </table>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+
+      <!-- FOOTER -->
+      <tr>
+        <td class="footer-td" bgcolor="#f9fafb" style="background-color:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;text-align:center;">
+          <p class="muted" style="margin:0;font-size:12px;color:#9ca3af;">Nebula9.ai · Agentic BI Platform · Auto-generated for {{ report.user_name }}</p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

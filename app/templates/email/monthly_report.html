@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monthly Executive Report</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; }
+    .wrapper { max-width: 640px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #1a1a2e 0%, #2d3561 100%); padding: 36px 40px; }
+    .header h1 { margin: 0 0 4px; color: #ffffff; font-size: 24px; font-weight: 700; }
+    .header p { margin: 0; color: #a0aec0; font-size: 13px; }
+    .badge { display: inline-block; background: #6b46c1; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-bottom: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .headline-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+    .headline-card { flex: 1; min-width: 120px; background: #f7fafc; border-radius: 8px; padding: 14px 16px; border-top: 3px solid #6b46c1; }
+    .headline-card .label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .headline-card .value { font-size: 20px; font-weight: 700; color: #1a202c; }
+    .headline-card .change { font-size: 12px; margin-top: 2px; }
+    .positive { color: #276749; } .negative { color: #9b2c2c; } .neutral-text { color: #4a5568; }
+    .section { padding: 28px 40px; border-bottom: 1px solid #edf2f7; }
+    .section:last-of-type { border-bottom: none; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #718096; margin: 0 0 16px; }
+    .narrative { font-size: 14px; color: #4a5568; line-height: 1.8; margin: 0 0 16px; }
+    .list-block { margin: 0; padding: 0 0 0 18px; }
+    .list-block li { font-size: 13px; color: #4a5568; margin-bottom: 6px; line-height: 1.5; }
+    .kpi-table { width: 100%; border-collapse: collapse; }
+    .kpi-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #718096; text-align: left; padding: 8px 0; border-bottom: 2px solid #edf2f7; }
+    .kpi-table td { font-size: 13px; padding: 10px 0; border-bottom: 1px solid #edf2f7; color: #2d3748; }
+    .kpi-table tr:last-child td { border-bottom: none; }
+    .change-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; }
+    .up { background: #c6f6d5; color: #276749; } .down { background: #fed7d7; color: #9b2c2c; } .flat { background: #e2e8f0; color: #4a5568; }
+    .insight-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #edf2f7; }
+    .insight-row:last-child { border-bottom: none; }
+    .sev-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+    .sev-dot.critical { background: #e53e3e; } .sev-dot.warning { background: #dd6b20; } .sev-dot.info { background: #3182ce; }
+    .insight-content h4 { margin: 0 0 2px; font-size: 14px; color: #1a202c; }
+    .insight-content p { margin: 0; font-size: 12px; color: #718096; }
+    .action-item { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+    .priority-badge { flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+    .p1 { background: #fed7d7; color: #9b2c2c; } .p2 { background: #feebc8; color: #7b341e; } .p3 { background: #e2e8f0; color: #4a5568; }
+    .action-text { font-size: 13px; color: #4a5568; line-height: 1.5; }
+    .appendix { background: #f7fafc; }
+    .appendix-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #edf2f7; font-size: 13px; }
+    .appendix-row:last-child { border-bottom: none; }
+    .appendix-row .label { color: #718096; } .appendix-row .val { color: #2d3748; font-weight: 600; }
+    .footer { padding: 24px 40px; background: #f7fafc; text-align: center; }
+    .footer p { margin: 0; font-size: 12px; color: #a0aec0; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="badge">Monthly Report</div>
+    <h1>Executive Business Report</h1>
+    <p>{{ report.period_label }}</p>
+  </div>
+
+  {% if report.headline_metrics %}
+  <div class="section">
+    <div class="section-title">Headline Metrics</div>
+    <div class="headline-grid">
+      {% for m in report.headline_metrics %}
+      <div class="headline-card">
+        <div class="label">{{ m.name }}</div>
+        <div class="value">{{ m.current_value }}</div>
+        {% if m.mom_change is not none %}
+        <div class="change {% if m.mom_change > 0 %}positive{% elif m.mom_change < 0 %}negative{% else %}neutral-text{% endif %}">
+          {% if m.mom_change > 0 %}▲{% elif m.mom_change < 0 %}▼{% endif %}
+          {{ "%.1f"|format(m.mom_change|abs) }}% MoM
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if report.executive_narrative %}
+  <div class="section">
+    <div class="section-title">Executive Summary</div>
+    <p class="narrative">{{ report.executive_narrative }}</p>
+    {% if report.key_wins %}
+    <p style="font-size:13px;font-weight:600;color:#276749;margin:0 0 6px;">Key Wins</p>
+    <ul class="list-block">{% for w in report.key_wins %}<li>{{ w }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if report.key_risks %}
+    <p style="font-size:13px;font-weight:600;color:#9b2c2c;margin:12px 0 6px;">Key Risks</p>
+    <ul class="list-block">{% for r in report.key_risks %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if report.kpi_scorecard %}
+  <div class="section">
+    <div class="section-title">KPI Scorecard</div>
+    <table class="kpi-table">
+      <thead>
+        <tr>
+          <th>KPI</th>
+          <th>Value</th>
+          <th>MoM</th>
+          <th>YoY</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for kpi in report.kpi_scorecard %}
+        <tr>
+          <td>{{ kpi.name }}</td>
+          <td style="font-weight:600;">{{ kpi.current_value }}</td>
+          <td>
+            {% if kpi.mom_change is not none %}
+            <span class="change-pill {% if kpi.mom_change > 0 %}up{% elif kpi.mom_change < 0 %}down{% else %}flat{% endif %}">
+              {% if kpi.mom_change > 0 %}+{% endif %}{{ "%.1f"|format(kpi.mom_change) }}%
+            </span>
+            {% else %}<span style="color:#a0aec0;">—</span>{% endif %}
+          </td>
+          <td>
+            {% if kpi.yoy_change is not none %}
+            <span class="change-pill {% if kpi.yoy_change > 0 %}up{% elif kpi.yoy_change < 0 %}down{% else %}flat{% endif %}">
+              {% if kpi.yoy_change > 0 %}+{% endif %}{{ "%.1f"|format(kpi.yoy_change) }}%
+            </span>
+            {% else %}<span style="color:#a0aec0;">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if report.insights %}
+  <div class="section">
+    <div class="section-title">Insights &amp; Anomalies</div>
+    {% for item in report.insights %}
+    <div class="insight-row">
+      <div class="sev-dot {{ item.severity }}"></div>
+      <div class="insight-content">
+        <h4>{{ item.title }}</h4>
+        {% if item.summary %}<p>{{ item.summary }}</p>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.decision_actions %}
+  <div class="section">
+    <div class="section-title">Recommended Actions</div>
+    {% for action in report.decision_actions %}
+    <div class="action-item">
+      <span class="priority-badge {{ action.priority|lower }}">{{ action.priority }}</span>
+      <span class="action-text">{{ action.description }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.appendix %}
+  <div class="section appendix">
+    <div class="section-title">Data Health</div>
+    <div class="appendix-row"><span class="label">Total Certified KPIs</span><span class="val">{{ report.appendix.total_kpis }}</span></div>
+    <div class="appendix-row"><span class="label">Anomalies Detected</span><span class="val">{{ report.appendix.anomaly_count }}</span></div>
+    <div class="appendix-row"><span class="label">Data Sources</span><span class="val">{{ report.appendix.source_count }}</span></div>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <p>Nebula9.ai &bull; Agentic BI Platform &bull; Auto-generated monthly report</p>
+  </div>
+</div>
+</body>
+</html>

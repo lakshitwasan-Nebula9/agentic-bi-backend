@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weekly Business Report</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; }
+    .wrapper { max-width: 640px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 32px 40px; }
+    .header h1 { margin: 0 0 4px; color: #ffffff; font-size: 22px; font-weight: 700; }
+    .header p { margin: 0; color: #a0aec0; font-size: 13px; }
+    .badge { display: inline-block; background: #e53e3e; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-bottom: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .section { padding: 28px 40px; border-bottom: 1px solid #edf2f7; }
+    .section:last-of-type { border-bottom: none; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #718096; margin: 0 0 16px; }
+    .insight-card { background: #f7fafc; border-left: 4px solid #e53e3e; border-radius: 6px; padding: 12px 16px; margin-bottom: 10px; }
+    .insight-card.warning { border-left-color: #dd6b20; }
+    .insight-card.info { border-left-color: #3182ce; }
+    .insight-card h4 { margin: 0 0 4px; font-size: 14px; color: #1a202c; }
+    .insight-card p { margin: 0; font-size: 13px; color: #4a5568; line-height: 1.5; }
+    .kpi-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf2f7; }
+    .kpi-row:last-child { border-bottom: none; }
+    .kpi-name { font-size: 14px; color: #2d3748; }
+    .kpi-value { font-size: 14px; font-weight: 600; color: #1a202c; }
+    .kpi-change { font-size: 12px; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+    .up { background: #c6f6d5; color: #276749; }
+    .down { background: #fed7d7; color: #9b2c2c; }
+    .neutral { background: #e2e8f0; color: #4a5568; }
+    .action-item { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+    .priority-badge { flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+    .p1 { background: #fed7d7; color: #9b2c2c; }
+    .p2 { background: #feebc8; color: #7b341e; }
+    .p3 { background: #e2e8f0; color: #4a5568; }
+    .action-text { font-size: 13px; color: #4a5568; line-height: 1.5; }
+    .footer { padding: 24px 40px; background: #f7fafc; text-align: center; }
+    .footer p { margin: 0; font-size: 12px; color: #a0aec0; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="badge">Weekly Report</div>
+    <h1>Business Intelligence Summary</h1>
+    <p>{{ report.period_label }}</p>
+  </div>
+
+  {% if report.executive_summary %}
+  <div class="section">
+    <div class="section-title">Executive Summary</div>
+    <p style="font-size:14px;color:#4a5568;line-height:1.7;margin:0;">{{ report.executive_summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if report.anomalies %}
+  <div class="section">
+    <div class="section-title">Anomalies &amp; Alerts This Week</div>
+    {% for item in report.anomalies %}
+    <div class="insight-card {{ item.severity }}">
+      <h4>{{ item.title }}</h4>
+      {% if item.summary %}<p>{{ item.summary }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.kpi_changes %}
+  <div class="section">
+    <div class="section-title">KPI Week-over-Week Changes</div>
+    {% for kpi in report.kpi_changes %}
+    <div class="kpi-row">
+      <span class="kpi-name">{{ kpi.name }}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="kpi-value">{{ kpi.current_value }}</span>
+        {% if kpi.wow_change is not none %}
+        <span class="kpi-change {% if kpi.wow_change > 0 %}up{% elif kpi.wow_change < 0 %}down{% else %}neutral{% endif %}">
+          {% if kpi.wow_change > 0 %}+{% endif %}{{ "%.1f"|format(kpi.wow_change) }}%
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if report.open_actions %}
+  <div class="section">
+    <div class="section-title">Open Action Items</div>
+    {% for action in report.open_actions %}
+    <div class="action-item">
+      <span class="priority-badge {{ action.priority|lower }}">{{ action.priority }}</span>
+      <span class="action-text">{{ action.description }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <p>Nebula9.ai &bull; Agentic BI Platform &bull; Auto-generated report</p>
+  </div>
+</div>
+</body>
+</html>
