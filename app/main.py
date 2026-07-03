@@ -24,14 +24,18 @@ from app.routers import (
     users,
 )
 from app.services import notification_fanout
+from app.services.report_scheduler import create_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     fanout_task = asyncio.create_task(notification_fanout.run())
+    scheduler = create_scheduler()
+    scheduler.start()
     try:
         yield
     finally:
+        scheduler.shutdown(wait=False)
         fanout_task.cancel()
         try:
             await fanout_task

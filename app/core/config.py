@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     HITL_SLA_BUSINESS_OWNER_HOURS: int = 48
     HITL_SLA_CERTIFICATION_HOURS: int = 72
 
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "Nebula9 Reports"
+
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_PUBLIC_KEY: str | None = None
     LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
