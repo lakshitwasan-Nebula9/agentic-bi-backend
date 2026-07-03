@@ -13,16 +13,18 @@ from app.crud import sync_log as sync_log_crud
 from app.crud import user as user_crud
 from app.models.user import User, UserRole
 from app.schemas.connector import (
+    ArchivedConnectorResponse,
     ColumnInfo,
     ConnectionTestRequest,
     ConnectionTestResult,
     ConnectorCreate,
+    ConnectorDashboardResponse,
     ConnectorResponse,
     ConnectorUpdate,
     TableInfo,
 )
 from app.schemas.sync_log import SyncLogResponse
-from app.services import connector_service
+from app.services import connector_service, purge_service
 from app.services.auth_service import decode_access_token
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
@@ -47,6 +49,16 @@ def list_connectors(
 ):
     connectors = connector_service.list_connectors(db, include_deleted=include_deleted)
     return [connector_service.enrich_connector(db, c) for c in connectors]
+
+
+@router.get("/archived", response_model=list[ArchivedConnectorResponse])
+def list_archived_connectors(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Soft-deleted connectors still within the 7-day restore window (Archive & Recovery)."""
+    connectors = connector_service.list_archived_connectors(db)
+    return [connector_service.enrich_archived_connector(db, c) for c in connectors]
 
 
 @router.get("/{connector_id}", response_model=ConnectorResponse)
@@ -89,6 +101,16 @@ def restore_connector(
 ):
     connector = connector_service.restore_connector(db, connector_id)
     return connector_service.enrich_connector(db, connector)
+
+
+@router.delete("/{connector_id}/purge", status_code=status.HTTP_204_NO_CONTENT)
+def purge_connector(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.MANAGER, UserRole.EXECUTIVE)),
+):
+    """Permanently delete an archived connector and its cascade immediately (Manager+)."""
+    purge_service.purge_connector(db, connector_id)
 
 
 @router.post("/test", response_model=ConnectionTestResult)
@@ -204,6 +226,17 @@ async def stream_sync_logs(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/{connector_id}/dashboards", response_model=list[ConnectorDashboardResponse])
+def list_connector_dashboards(
+    connector_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Dashboards whose widgets were preconfigured from this connector's KPIs."""
+    connector_service.get_connector_or_404(db, connector_id)
+    return connector_service.list_connector_dashboards(db, connector_id)
 
 
 @router.get("/{connector_id}/tables", response_model=list[TableInfo])
