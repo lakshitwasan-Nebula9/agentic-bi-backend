@@ -84,6 +84,30 @@ def get_report(
     return report
 
 
+@router.post("/trigger/weekly", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_weekly_report(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_role(*GENERATE_ROLES)),
+):
+    """Manually trigger the weekly report job (sends emails to Managers + Analysts)."""
+    from app.services.report_scheduler import _run_weekly_job
+
+    background_tasks.add_task(_run_weekly_job)
+    return {"message": "Weekly report job queued"}
+
+
+@router.post("/trigger/monthly", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_monthly_report(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_role(*GENERATE_ROLES)),
+):
+    """Manually trigger the monthly report job (sends emails to Executives + Managers)."""
+    from app.services.report_scheduler import _run_monthly_job
+
+    background_tasks.add_task(_run_monthly_job)
+    return {"message": "Monthly report job queued"}
+
+
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_report(
     report_id: uuid.UUID,
