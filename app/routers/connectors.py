@@ -2,13 +2,14 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
 from app.core.security import get_current_user, require_role
+from app.crud import kpi as kpi_crud
 from app.crud import sync_log as sync_log_crud
 from app.crud import user as user_crud
 from app.models.user import User, UserRole
@@ -19,12 +20,14 @@ from app.schemas.connector import (
     ConnectionTestResult,
     ConnectorCreate,
     ConnectorDashboardResponse,
+    ConnectorDatasetSyncResult,
     ConnectorResponse,
+    ConnectorSyncResult,
     ConnectorUpdate,
     TableInfo,
 )
 from app.schemas.sync_log import SyncLogResponse
-from app.services import connector_service, purge_service
+from app.services import connector_service, dataset_service, purge_service
 from app.services.auth_service import decode_access_token
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
@@ -139,6 +142,72 @@ def test_connector_connection(
     connector = connector_service.get_connector_or_404(db, connector_id)
     success, message = connector_service.test_connection(connector)
     return ConnectionTestResult(success=success, message=message)
+
+
+@router.post("/{connector_id}/sync", response_model=ConnectorSyncResult)
+def sync_connector(
+    connector_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(*MANAGE_ROLES)),
+):
+    """Re-sync every dataset under a connector (extract + load + quality scoring).
+
+    Reuses the same per-dataset pipeline as ``POST /datasets/{id}/sync`` and queues
+    first-time KPI generation on newly-populated datasets, so the sync → KPI flow is
+    preserved. One dataset failing does not abort the others.
+    """
+    # Import here to avoid importing the datasets router at module load time.
+    from app.routers.datasets import _auto_generate_kpis
+
+    connector_service.get_connector_or_404(db, connector_id)
+    datasets = dataset_service.list_by_connector(db, connector_id)
+
+    results: list[ConnectorDatasetSyncResult] = []
+    synced = failed = kpi_triggered = total_rows = 0
+
+    for dataset in datasets:
+        is_first_sync = dataset.last_synced_at is None
+        try:
+            updated = dataset_service.sync_dataset(db, dataset.id, triggered_by=current_user.id)
+        except HTTPException as exc:
+            failed += 1
+            results.append(
+                ConnectorDatasetSyncResult(
+                    dataset_id=dataset.id,
+                    dataset_name=dataset.name,
+                    status="error",
+                    message=str(exc.detail),
+                )
+            )
+            continue
+
+        total_rows += updated.row_count
+        quarantined = updated.status == "quarantined"
+        synced += 1
+        results.append(
+            ConnectorDatasetSyncResult(
+                dataset_id=updated.id,
+                dataset_name=updated.name,
+                status="warning" if quarantined else "success",
+                row_count=updated.row_count,
+                quality_score=updated.quality_score,
+            )
+        )
+
+        # Mirror the datasets router: first sync, quality passed, no KPIs yet.
+        if is_first_sync and not quarantined and not kpi_crud.list_kpis(db, dataset_id=dataset.id):
+            background_tasks.add_task(_auto_generate_kpis, dataset.id)
+            kpi_triggered += 1
+
+    return ConnectorSyncResult(
+        datasets_total=len(datasets),
+        datasets_synced=synced,
+        datasets_failed=failed,
+        total_rows=total_rows,
+        kpi_generation_triggered=kpi_triggered,
+        results=results,
+    )
 
 
 @router.get("/{connector_id}/sync-logs", response_model=list[SyncLogResponse])

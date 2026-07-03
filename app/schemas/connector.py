@@ -74,6 +74,30 @@ class ConnectorDashboardResponse(BaseModel):
     updated_at: datetime
 
 
+class ConnectorDatasetSyncResult(BaseModel):
+    """Outcome of syncing one dataset during a connector-wide sync."""
+
+    dataset_id: uuid.UUID
+    dataset_name: str
+    status: str = Field(description='"success", "warning" (quality low), or "error"')
+    row_count: int = 0
+    quality_score: float | None = None
+    message: str | None = None
+
+
+class ConnectorSyncResult(BaseModel):
+    """Aggregate result of syncing every dataset under a connector."""
+
+    datasets_total: int
+    datasets_synced: int
+    datasets_failed: int
+    total_rows: int
+    kpi_generation_triggered: int = Field(
+        description="Number of datasets that queued first-time KPI generation"
+    )
+    results: list[ConnectorDatasetSyncResult] = []
+
+
 class ConnectionTestResult(BaseModel):
     success: bool
     message: str = Field(description="Human-readable result of the connection attempt")
