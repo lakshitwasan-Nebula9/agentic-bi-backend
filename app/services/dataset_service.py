@@ -62,6 +62,16 @@ def list_datasets(db: Session, include_deleted: bool = False) -> list[Dataset]:
     return dataset_crud.list_datasets(db, include_deleted=include_deleted)
 
 
+def list_by_connector(db: Session, connector_id: uuid.UUID) -> list[Dataset]:
+    """Non-deleted datasets belonging to a connector (source for connector-wide sync)."""
+    return (
+        db.query(Dataset)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False))
+        .order_by(Dataset.created_at.asc())
+        .all()
+    )
+
+
 def create_dataset(db: Session, payload: DatasetCreate, created_by: uuid.UUID) -> Dataset:
     if dataset_crud.get_dataset_by_name(db, payload.name) is not None:
         raise HTTPException(

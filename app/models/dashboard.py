@@ -17,6 +17,10 @@ class Dashboard(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Business domain, mirroring the GenAI-assigned KPI categories of the dashboard's
+    # data source (auto-derived from the linked connector on create; see
+    # dashboard_service._dominant_kpi_category). NULL means uncategorized.
+    category: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

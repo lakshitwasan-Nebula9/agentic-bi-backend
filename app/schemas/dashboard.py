@@ -1,7 +1,20 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+def _normalize_category(value: str | None) -> str | None:
+    """Normalize a dashboard category (trim + lower-case); '' → None.
+
+    Categories are dynamic — they mirror the GenAI-assigned KPI categories of the
+    dashboard's data source (see GET /kpis/categories), so there is no fixed
+    allow-list to validate against here.
+    """
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
 
 
 class WidgetCreate(BaseModel):
@@ -51,16 +64,28 @@ class WidgetResponse(BaseModel):
 class DashboardCreate(BaseModel):
     name: str
     description: str | None = None
+    category: str | None = None
     is_default: bool = False
     # When set, the new dashboard is preconfigured with widgets built from this
     # connector's most recently certified KPIs. Empty → blank dashboard.
     connector_id: uuid.UUID | None = None
 
+    @field_validator("category")
+    @classmethod
+    def _check_category(cls, v: str | None) -> str | None:
+        return _normalize_category(v)
+
 
 class DashboardUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    category: str | None = None
     is_default: bool | None = None
+
+    @field_validator("category")
+    @classmethod
+    def _check_category(cls, v: str | None) -> str | None:
+        return _normalize_category(v)
 
 
 class DashboardResponse(BaseModel):
@@ -68,6 +93,7 @@ class DashboardResponse(BaseModel):
     owner_id: uuid.UUID
     name: str
     description: str | None
+    category: str | None
     is_default: bool
     created_at: datetime
     updated_at: datetime

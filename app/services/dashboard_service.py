@@ -69,9 +69,16 @@ def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
 
 
 def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID) -> Dashboard:
+    # An explicit category wins; otherwise infer it from the linked data source so
+    # the dashboard files itself under the domain of the DB it was built from.
+    category = payload.category
+    if category is None and payload.connector_id is not None:
+        category = _dominant_kpi_category(db, payload.connector_id)
+
     dashboard = Dashboard(
         name=payload.name,
         description=payload.description,
+        category=category,
         is_default=payload.is_default,
         owner_id=owner_id,
     )
@@ -79,6 +86,88 @@ def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID)
     if payload.connector_id is not None:
         _preconfigure_widgets(db, dashboard, payload.connector_id)
     return dashboard
+
+
+def _widget_kpi_ids(db: Session, dashboard_id: uuid.UUID) -> list[uuid.UUID]:
+    """KPI ids referenced by a dashboard's widgets (via ``config->>'kpi_id'``)."""
+    ids: list[uuid.UUID] = []
+    rows = (
+        db.query(DashboardWidget.config["kpi_id"].astext)
+        .filter(DashboardWidget.dashboard_id == dashboard_id)
+        .all()
+    )
+    for (value,) in rows:
+        if not value:
+            continue
+        try:
+            ids.append(uuid.UUID(value))
+        except (ValueError, AttributeError):
+            continue
+    return ids
+
+
+def _dominant_category_from_widgets(db: Session, dashboard_id: uuid.UUID) -> str | None:
+    """Most common KPI category among the KPIs actually placed on the dashboard.
+
+    Unlike the connector lookup this needs no stored source link, so it also works
+    for dashboards created before category auto-assignment (see backfill_categories).
+    Ties broken alphabetically; None when no widget maps to a categorized KPI.
+    """
+    kpi_ids = _widget_kpi_ids(db, dashboard_id)
+    if not kpi_ids:
+        return None
+    row = (
+        db.query(KPIDefinition.category, func.count().label("n"))
+        .filter(
+            KPIDefinition.id.in_(kpi_ids),
+            KPIDefinition.is_deleted.is_(False),
+            KPIDefinition.category.isnot(None),
+        )
+        .group_by(KPIDefinition.category)
+        .order_by(func.count().desc(), KPIDefinition.category.asc())
+        .first()
+    )
+    return row[0] if row else None
+
+
+def backfill_categories(db: Session) -> int:
+    """Assign a category to every uncategorized dashboard from its widgets' KPIs.
+
+    One-off migration for dashboards created before category auto-assignment.
+    Returns the number of dashboards updated.
+    """
+    updated = 0
+    for dashboard in db.query(Dashboard).filter(Dashboard.category.is_(None)).all():
+        derived = _dominant_category_from_widgets(db, dashboard.id)
+        if derived is not None:
+            dashboard.category = derived
+            updated += 1
+    if updated:
+        db.commit()
+    return updated
+
+
+def _dominant_kpi_category(db: Session, connector_id: uuid.UUID) -> str | None:
+    """Most common KPI category across a connector's datasets — the DB's data domain.
+
+    Reflects "what kind of data this source holds" (revenue, operational, customer,
+    …) from the GenAI-assigned KPI categories. Ties broken alphabetically; returns
+    None when the connector has no categorized KPIs.
+    """
+    row = (
+        db.query(KPIDefinition.category, func.count().label("n"))
+        .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
+        .filter(
+            Dataset.connector_id == connector_id,
+            Dataset.is_deleted.is_(False),
+            KPIDefinition.is_deleted.is_(False),
+            KPIDefinition.category.isnot(None),
+        )
+        .group_by(KPIDefinition.category)
+        .order_by(func.count().desc(), KPIDefinition.category.asc())
+        .first()
+    )
+    return row[0] if row else None
 
 
 def _certified_kpis_for_connector(db: Session, connector_id: uuid.UUID) -> list[KPIDefinition]:
