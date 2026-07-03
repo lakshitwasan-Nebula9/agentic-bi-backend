@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.crud import connector as connector_crud
 from app.models.approval_request import ApprovalRequest
 from app.models.connector import DataConnector
+from app.models.dashboard import Dashboard, DashboardWidget
 from app.models.dataset import Dataset, DatasetRecord
 from app.models.decision import DecisionRecord
 from app.models.embeddings import EmbeddingRecord
@@ -18,7 +19,13 @@ from app.models.explanation import InsightExplanation
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.schema_metadata import SchemaMetadata
-from app.schemas.connector import ConnectorCreate, ConnectorResponse, ConnectorUpdate
+from app.schemas.connector import (
+    ArchivedConnectorResponse,
+    ConnectorCreate,
+    ConnectorDashboardResponse,
+    ConnectorResponse,
+    ConnectorUpdate,
+)
 from app.services.encryption_service import decrypt_value, encrypt_value
 
 logger = logging.getLogger(__name__)
@@ -418,10 +425,112 @@ def enrich_connector(db: Session, connector: DataConnector) -> ConnectorResponse
         created_by=connector.created_by,
         created_at=connector.created_at,
         updated_at=connector.updated_at,
+        is_deleted=connector.is_deleted,
+        deleted_at=connector.deleted_at,
         table_count=_live_table_count(connector),
         kpi_count=_kpi_count(db, connector.id),
         quality_score=_latest_quality_score(db, connector.id),
     )
+
+
+def list_archived_connectors(db: Session) -> list[DataConnector]:
+    """Soft-deleted connectors still inside the 7-day restore window, closest to expiry first."""
+    cutoff = datetime.now(UTC) - timedelta(days=SOFT_DELETE_WINDOW_DAYS)
+    return (
+        db.query(DataConnector)
+        .filter(DataConnector.is_deleted.is_(True), DataConnector.deleted_at > cutoff)
+        .order_by(DataConnector.deleted_at.asc())
+        .all()
+    )
+
+
+def enrich_archived_connector(db: Session, connector: DataConnector) -> ArchivedConnectorResponse:
+    """Build the archive-card payload from app-DB data only (no live source connection)."""
+    expires_at = connector.deleted_at + timedelta(days=SOFT_DELETE_WINDOW_DAYS)
+    return ArchivedConnectorResponse(
+        id=connector.id,
+        name=connector.name,
+        connector_type=connector.connector_type,
+        deleted_at=connector.deleted_at,
+        expires_at=expires_at,
+        kpi_count=_archived_kpi_count(db, connector.id),
+        table_count=_archived_table_count(db, connector.id),
+    )
+
+
+def _archived_kpi_count(db: Session, connector_id: uuid.UUID) -> int:
+    """Count KPIs cascade-removed with this connector (they are soft-deleted, so no live filter)."""
+    return (
+        db.query(func.count(KPIDefinition.id))
+        .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
+        .filter(Dataset.connector_id == connector_id)
+        .scalar()
+    ) or 0
+
+
+def _archived_table_count(db: Session, connector_id: uuid.UUID) -> int:
+    """Count detected tables (schema metadata rows) belonging to this connector's datasets."""
+    return (
+        db.query(func.count(SchemaMetadata.id))
+        .join(Dataset, Dataset.id == SchemaMetadata.dataset_id)
+        .filter(Dataset.connector_id == connector_id)
+        .scalar()
+    ) or 0
+
+
+def list_connector_dashboards(
+    db: Session, connector_id: uuid.UUID
+) -> list[ConnectorDashboardResponse]:
+    """Dashboards whose widgets reference any of this connector's KPIs.
+
+    There is no stored connector->dashboard link, so the association is derived from
+    widget configs (``config->>'kpi_id'``) that were preconfigured from this source.
+    """
+    kpi_ids = [
+        str(row[0])
+        for row in db.query(KPIDefinition.id)
+        .join(Dataset, Dataset.id == KPIDefinition.dataset_id)
+        .filter(Dataset.connector_id == connector_id, Dataset.is_deleted.is_(False))
+        .filter(KPIDefinition.is_deleted.is_(False))
+        .all()
+    ]
+    if not kpi_ids:
+        return []
+
+    # Distinct connector-KPIs used per dashboard.
+    rows = (
+        db.query(DashboardWidget.dashboard_id, DashboardWidget.config["kpi_id"].astext)
+        .filter(DashboardWidget.config["kpi_id"].astext.in_(kpi_ids))
+        .all()
+    )
+    kpis_per_dashboard: dict[uuid.UUID, set[str]] = {}
+    for dashboard_id, kpi_id in rows:
+        kpis_per_dashboard.setdefault(dashboard_id, set()).add(kpi_id)
+    if not kpis_per_dashboard:
+        return []
+
+    dashboard_ids = list(kpis_per_dashboard.keys())
+    total_widgets = dict(
+        db.query(DashboardWidget.dashboard_id, func.count())
+        .filter(DashboardWidget.dashboard_id.in_(dashboard_ids))
+        .group_by(DashboardWidget.dashboard_id)
+        .all()
+    )
+    dashboards = db.query(Dashboard).filter(Dashboard.id.in_(dashboard_ids)).all()
+
+    result = [
+        ConnectorDashboardResponse(
+            id=d.id,
+            name=d.name,
+            description=d.description,
+            widget_count=total_widgets.get(d.id, 0),
+            kpi_count=len(kpis_per_dashboard.get(d.id, set())),
+            updated_at=d.updated_at,
+        )
+        for d in dashboards
+    ]
+    result.sort(key=lambda r: r.updated_at, reverse=True)
+    return result
 
 
 def extract_rows(

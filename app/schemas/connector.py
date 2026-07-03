@@ -49,6 +49,31 @@ class ConnectorResponse(BaseModel):
     quality_score: float | None = None
 
 
+class ArchivedConnectorResponse(BaseModel):
+    """A soft-deleted connector still within the 7-day restore window."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    connector_type: str
+    deleted_at: datetime
+    expires_at: datetime
+    kpi_count: int
+    table_count: int
+
+
+class ConnectorDashboardResponse(BaseModel):
+    """A dashboard that references this connector's KPIs (via its widgets)."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    widget_count: int
+    kpi_count: int
+    updated_at: datetime
+
+
 class ConnectionTestResult(BaseModel):
     success: bool
     message: str = Field(description="Human-readable result of the connection attempt")
