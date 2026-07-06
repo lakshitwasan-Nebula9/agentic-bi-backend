@@ -53,10 +53,12 @@ def list_kpis(
 def create_kpi_manual(
     req: KPIManualCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Create a KPI from the 'Add New KPI' form and immediately queue it for executive approval."""
-    kpi = kpi_service.create_manual_kpi(db, req)
+    kpi = kpi_service.create_manual_kpi(
+        db, req, actor_id=current_user.id, actor_role=current_user.role.value
+    )
     hitl_svc.create_kpi_approval(db, kpi.id)
     return kpi_service.get_kpi(db, kpi.id)
 
@@ -76,18 +78,20 @@ def update_kpi(
     kpi_id: uuid.UUID,
     updates: KPIUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    return kpi_service.update_kpi(db, kpi_id, updates)
+    return kpi_service.update_kpi(
+        db, kpi_id, updates, actor_id=current_user.id, actor_role=current_user.role.value
+    )
 
 
 @router.delete("/kpis/{kpi_id}", status_code=204)
 def delete_kpi(
     kpi_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_manager),
+    current_user: User = Depends(require_manager),
 ):
-    kpi_service.delete_kpi(db, kpi_id)
+    kpi_service.delete_kpi(db, kpi_id, actor_id=current_user.id, actor_role=current_user.role.value)
 
 
 @router.post("/kpis/{kpi_id}/regen", response_model=KPIResponse)

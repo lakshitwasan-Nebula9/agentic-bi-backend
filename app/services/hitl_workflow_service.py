@@ -27,6 +27,7 @@ from app.crud.approval_request import (
 )
 from app.models.approval_request import ApprovalRequest
 from app.models.user import ROLE_RANK, UserRole
+from app.services.audit_service import record_audit
 
 
 def _assert_can_action(actor_role: str, assigned_role: str) -> None:
@@ -94,6 +95,16 @@ def process_approval(
             raise HTTPException(status_code=404, detail=f"KPI {ar.entity_id} not found")
         kpi_crud.certify_kpi(db, kpi, certified_by=actor_id)
         close_approval(db, ar, status="approved", resolved_by=actor_id, note=note)
+        record_audit(
+            db,
+            action="kpi.certified",
+            entity_type="kpi",
+            entity_id=ar.entity_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            summary=f"KPI '{kpi.name}' certified via approval {ar.id}",
+            details={"ar_id": str(ar.id), "note": note},
+        )
         return ApprovalOutcome(
             ar=ar,
             event_type="kpi_certified",
@@ -132,6 +143,16 @@ def process_rejection(
         raise HTTPException(status_code=404, detail=f"KPI {ar.entity_id} not found")
     kpi_crud.reject_kpi(db, kpi, rejected_by=actor_id, reason=reason)
     close_approval(db, ar, status="rejected", resolved_by=actor_id, note=reason)
+    record_audit(
+        db,
+        action="kpi.rejected",
+        entity_type="kpi",
+        entity_id=ar.entity_id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        summary=f"KPI '{kpi.name}' rejected via approval {ar.id}",
+        details={"ar_id": str(ar.id), "reason": reason},
+    )
     return ApprovalOutcome(
         ar=ar,
         event_type="kpi_rejected",

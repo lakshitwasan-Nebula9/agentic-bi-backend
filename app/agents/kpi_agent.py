@@ -29,6 +29,7 @@ from app.crud.kpi import create_kpi, list_kpis
 from app.crud.schema_metadata import get_schema_metadata_by_table
 from app.prompts import load_prompt
 from app.schemas.kpi import KPICreate
+from app.services.audit_service import SYSTEM_ROLE, record_audit
 from app.services.embedding_service import upsert_embedding
 from app.services.hitl_workflow_service import create_kpi_approval
 from app.services.kpi_calculation_service import snapshot_kpi
@@ -201,6 +202,16 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
                 suggested_chart_type=raw.suggested_chart_type,
             )
             kpi = create_kpi(db, kpi_create)
+
+            record_audit(
+                db,
+                action="kpi.created",
+                entity_type="kpi",
+                entity_id=kpi.id,
+                actor_role=SYSTEM_ROLE,
+                summary=f"KPI '{kpi.name}' auto-generated for dataset {dataset_id}",
+                details={"dataset_id": str(dataset_id), "source": "kpi_agent"},
+            )
 
             try:
                 create_kpi_approval(db, kpi.id)
