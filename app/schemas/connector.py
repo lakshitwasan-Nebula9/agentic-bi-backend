@@ -1,7 +1,24 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+AuthMethod = Literal["password", "token"]
+
+
+def _validate_secret(auth_method: str, password: str | None, access_token: str | None) -> None:
+    """Ensure exactly the secret matching the chosen auth method is provided."""
+    if auth_method == "token":
+        if not access_token:
+            raise ValueError("access_token is required when auth_method is 'token'")
+        if password:
+            raise ValueError("password must be omitted when auth_method is 'token'")
+    else:
+        if not password:
+            raise ValueError("password is required when auth_method is 'password'")
+        if access_token:
+            raise ValueError("access_token must be omitted when auth_method is 'password'")
 
 
 class ConnectorCreate(BaseModel):
@@ -11,8 +28,15 @@ class ConnectorCreate(BaseModel):
     port: int = 5432
     database_name: str
     username: str
-    password: str
+    auth_method: AuthMethod = "password"
+    password: str | None = None
+    access_token: str | None = None
     extra_config: dict | None = None
+
+    @model_validator(mode="after")
+    def _check_secret(self) -> "ConnectorCreate":
+        _validate_secret(self.auth_method, self.password, self.access_token)
+        return self
 
 
 class ConnectorUpdate(BaseModel):
@@ -21,7 +45,9 @@ class ConnectorUpdate(BaseModel):
     port: int | None = None
     database_name: str | None = None
     username: str | None = None
+    auth_method: AuthMethod | None = None
     password: str | None = None
+    access_token: str | None = None
     extra_config: dict | None = None
     is_active: bool | None = None
 
@@ -36,6 +62,7 @@ class ConnectorResponse(BaseModel):
     port: int
     database_name: str
     username: str
+    auth_method: str
     extra_config: dict | None
     is_active: bool
     created_by: uuid.UUID | None
@@ -108,8 +135,15 @@ class ConnectionTestRequest(BaseModel):
     port: int = 5432
     database_name: str
     username: str
-    password: str
+    auth_method: AuthMethod = "password"
+    password: str | None = None
+    access_token: str | None = None
     connector_type: str = "postgres"
+
+    @model_validator(mode="after")
+    def _check_secret(self) -> "ConnectionTestRequest":
+        _validate_secret(self.auth_method, self.password, self.access_token)
+        return self
 
 
 class TableInfo(BaseModel):

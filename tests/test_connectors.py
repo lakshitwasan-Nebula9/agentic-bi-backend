@@ -95,6 +95,60 @@ def test_connector_test_endpoint_reports_failure_for_unreachable_host():
     assert delete_response.status_code == 204
 
 
+def test_connector_create_with_access_token_auth():
+    token = _signup_and_get_token()
+    headers = _auth_headers(token)
+
+    create_response = client.post(
+        "/api/v1/connectors",
+        headers=headers,
+        json={
+            "name": f"token-conn-{uuid.uuid4().hex}",
+            "host": "localhost",
+            "port": 5432,
+            "database_name": "agentic_bi",
+            "username": "iam_user",
+            "auth_method": "token",
+            "access_token": "super-secret-access-token",
+        },
+    )
+    assert create_response.status_code == 201
+    connector = create_response.json()
+    assert connector["auth_method"] == "token"
+    # The secret must never leak back out in any form.
+    assert "access_token" not in connector
+    assert "password" not in connector
+    assert "encrypted_password" not in connector
+    connector_id = connector["id"]
+
+    get_response = client.get(f"/api/v1/connectors/{connector_id}", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["auth_method"] == "token"
+
+    delete_response = client.delete(f"/api/v1/connectors/{connector_id}", headers=headers)
+    assert delete_response.status_code == 204
+
+
+def test_connector_token_auth_requires_access_token():
+    token = _signup_and_get_token()
+    headers = _auth_headers(token)
+
+    response = client.post(
+        "/api/v1/connectors",
+        headers=headers,
+        json={
+            "name": f"token-missing-{uuid.uuid4().hex}",
+            "host": "localhost",
+            "port": 5432,
+            "database_name": "agentic_bi",
+            "username": "iam_user",
+            "auth_method": "token",
+            # access_token intentionally omitted
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_connector_requires_authentication():
     response = client.get("/api/v1/connectors")
     assert response.status_code in (401, 403)

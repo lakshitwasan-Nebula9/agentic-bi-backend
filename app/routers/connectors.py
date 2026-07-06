@@ -122,12 +122,15 @@ def test_connection_raw(
     current_user: User = Depends(require_role(*MANAGE_ROLES)),
 ):
     """Test credentials before saving a connector."""
+    secret = connector_service.resolve_secret(
+        payload.auth_method, payload.password, payload.access_token
+    )
     success, message = connector_service.test_connection_raw(
         host=payload.host,
         port=payload.port,
         database_name=payload.database_name,
         username=payload.username,
-        password=payload.password,
+        password=secret,
     )
     return ConnectionTestResult(success=success, message=message)
 

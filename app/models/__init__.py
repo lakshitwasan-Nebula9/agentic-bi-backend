@@ -1,4 +1,5 @@
 from app.models.approval_request import ApprovalRequest
+from app.models.audit_log import AuditLog
 from app.models.connector import DataConnector
 from app.models.copilot import ChatMessage, ChatSession
 from app.models.dashboard import Dashboard, DashboardWidget
@@ -17,6 +18,7 @@ from app.models.user import User, UserRole
 
 __all__ = [
     "ApprovalRequest",
+    "AuditLog",
     "ChatMessage",
     "ChatSession",
     "DecisionRecord",

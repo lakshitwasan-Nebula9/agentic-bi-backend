@@ -43,6 +43,18 @@ def encrypt_password(password: str) -> str:
     return encrypt_value(password)
 
 
+def resolve_secret(auth_method: str, password: str | None, access_token: str | None) -> str:
+    """Return the plaintext secret to store/use, based on the chosen auth method.
+
+    For token auth the access token is used exactly where a password would be — Postgres
+    authenticates username + secret, and managed DBs accept the token in the password slot.
+    """
+    secret = access_token if auth_method == "token" else password
+    if not secret:
+        raise ValueError(f"Missing secret for auth_method '{auth_method}'")
+    return secret
+
+
 def get_connector_or_404(
     db: Session, connector_id: uuid.UUID, include_deleted: bool = False
 ) -> DataConnector:
@@ -63,6 +75,7 @@ def create_connector(db: Session, payload: ConnectorCreate, created_by: uuid.UUI
             detail="A connector with this name already exists",
         )
 
+    secret = resolve_secret(payload.auth_method, payload.password, payload.access_token)
     connector = DataConnector(
         name=payload.name,
         connector_type=payload.connector_type,
@@ -70,7 +83,8 @@ def create_connector(db: Session, payload: ConnectorCreate, created_by: uuid.UUI
         port=payload.port,
         database_name=payload.database_name,
         username=payload.username,
-        encrypted_password=encrypt_password(payload.password),
+        auth_method=payload.auth_method,
+        encrypted_password=encrypt_password(secret),
         extra_config=payload.extra_config,
         created_by=created_by,
     )
@@ -82,9 +96,18 @@ def update_connector(
 ) -> DataConnector:
     connector = get_connector_or_404(db, connector_id)
 
-    updates = payload.model_dump(exclude_unset=True, exclude={"password"})
-    if payload.password is not None:
-        updates["encrypted_password"] = encrypt_password(payload.password)
+    updates = payload.model_dump(exclude_unset=True, exclude={"password", "access_token"})
+
+    # Re-encrypt the secret when either the auth method or a secret value changes.
+    auth_method = payload.auth_method or connector.auth_method
+    if (
+        payload.auth_method is not None
+        or payload.password is not None
+        or payload.access_token is not None
+    ):
+        secret = resolve_secret(auth_method, payload.password, payload.access_token)
+        updates["auth_method"] = auth_method
+        updates["encrypted_password"] = encrypt_password(secret)
 
     return connector_crud.update_connector(db, connector, updates)
 
@@ -420,6 +443,7 @@ def enrich_connector(db: Session, connector: DataConnector) -> ConnectorResponse
         port=connector.port,
         database_name=connector.database_name,
         username=connector.username,
+        auth_method=connector.auth_method,
         extra_config=connector.extra_config,
         is_active=connector.is_active,
         created_by=connector.created_by,
