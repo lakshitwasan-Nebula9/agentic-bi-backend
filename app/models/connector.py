@@ -20,6 +20,11 @@ class DataConnector(Base):
     port: Mapped[int] = mapped_column(Integer, nullable=False, default=5432)
     database_name: Mapped[str] = mapped_column(String, nullable=False)
     username: Mapped[str] = mapped_column(String, nullable=False)
+    # "password" or "token": which secret kind is stored in encrypted_password.
+    auth_method: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="password", default="password"
+    )
+    # Single encrypted secret store — holds the password OR the access token per auth_method.
     encrypted_password: Mapped[str] = mapped_column(String, nullable=False)
     extra_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
