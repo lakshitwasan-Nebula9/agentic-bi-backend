@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import (
     approvals,
+    audit_logs,
     auth,
     connectors,
     copilot,
@@ -58,6 +59,7 @@ app.add_middleware(
 )
 
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
+app.include_router(audit_logs.router, prefix=settings.API_V1_PREFIX)
 app.include_router(copilot.router, prefix=settings.API_V1_PREFIX)
 app.include_router(decisions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)

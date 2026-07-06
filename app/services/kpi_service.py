@@ -16,6 +16,7 @@ from app.schemas.kpi import (
     KPIResponse,
     KPIUpdate,
 )
+from app.services.audit_service import record_audit
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +150,24 @@ def list_categories(db: Session) -> list[KPICategoryResponse]:
     return [KPICategoryResponse(id=name, name=name) for name in names]
 
 
-def update_kpi(db: Session, kpi_id: uuid.UUID, updates: KPIUpdate) -> KPIResponse:
+def update_kpi(
+    db: Session,
+    kpi_id: uuid.UUID,
+    updates: KPIUpdate,
+    actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
+) -> KPIResponse:
     kpi = _get_or_404(db, kpi_id)
     updated = kpi_crud.update_kpi(db, kpi, updates)
+    record_audit(
+        db,
+        action="kpi.updated",
+        entity_type="kpi",
+        entity_id=kpi_id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        summary=f"KPI '{updated.name}' updated",
+    )
     return _enrich(db, [updated])[0]
 
 
@@ -161,6 +177,14 @@ def certify_kpi(db: Session, kpi_id: uuid.UUID, req: KPICertifyRequest) -> KPIRe
         updated = kpi_crud.certify_kpi(db, kpi, req.certified_by)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    record_audit(
+        db,
+        action="kpi.certified",
+        entity_type="kpi",
+        entity_id=kpi_id,
+        actor_id=req.certified_by,
+        summary=f"KPI '{updated.name}' certified",
+    )
     return _enrich(db, [updated])[0]
 
 
@@ -170,6 +194,15 @@ def reject_kpi(db: Session, kpi_id: uuid.UUID, req: KPIRejectRequest) -> KPIResp
         updated = kpi_crud.reject_kpi(db, kpi, req.rejected_by, req.rejection_reason)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    record_audit(
+        db,
+        action="kpi.rejected",
+        entity_type="kpi",
+        entity_id=kpi_id,
+        actor_id=req.rejected_by,
+        summary=f"KPI '{updated.name}' rejected",
+        details={"reason": req.rejection_reason},
+    )
     return _enrich(db, [updated])[0]
 
 
@@ -180,15 +213,35 @@ def list_snapshots(
     return kpi_crud.list_snapshots(db, kpi_id, limit=limit, include_deleted=include_deleted)
 
 
-def delete_kpi(db: Session, kpi_id: uuid.UUID) -> None:
+def delete_kpi(
+    db: Session,
+    kpi_id: uuid.UUID,
+    actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
+) -> None:
     kpi = _get_or_404(db, kpi_id)
+    kpi_name = kpi.name
     try:
         kpi_crud.delete_kpi(db, kpi)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record_audit(
+        db,
+        action="kpi.deleted",
+        entity_type="kpi",
+        entity_id=kpi_id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        summary=f"KPI '{kpi_name}' deleted",
+    )
 
 
-def create_manual_kpi(db: Session, req: KPIManualCreate) -> KPIDefinition:
+def create_manual_kpi(
+    db: Session,
+    req: KPIManualCreate,
+    actor_id: uuid.UUID | None = None,
+    actor_role: str | None = None,
+) -> KPIDefinition:
     """Create a KPI from the 'Add New KPI' form. Returns the ORM object so the router can create an AR."""
     from app.crud.dataset import get_dataset
     from app.schemas.kpi import KPICreate
@@ -210,6 +263,15 @@ def create_manual_kpi(db: Session, req: KPIManualCreate) -> KPIDefinition:
         owner_name=req.owner_name,
     )
     kpi = kpi_crud.create_kpi(db, kpi_create)
+    record_audit(
+        db,
+        action="kpi.created",
+        entity_type="kpi",
+        entity_id=kpi.id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        summary=f"KPI '{kpi.name}' created",
+    )
     try:
         snapshot_kpi(db, kpi)
     except Exception:

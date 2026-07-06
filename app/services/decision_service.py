@@ -26,6 +26,7 @@ from app.crud.kpi import get_kpi
 from app.models.decision import DecisionRecord
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition
+from app.services.audit_service import SYSTEM_ROLE, record_audit
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,21 @@ async def make_decision(db: Session, insight_event_id: uuid.UUID) -> DecisionRec
         )
 
     record = decision_crud.update_decision(db, record, **update_kwargs)
+    record_audit(
+        db,
+        action="decision.created",
+        entity_type="decision",
+        entity_id=record.id,
+        actor_role=SYSTEM_ROLE,
+        summary=f"AI decision {priority}/{action_type} for KPI {event.kpi_id}",
+        details={
+            "insight_event_id": str(insight_event_id),
+            "kpi_id": str(event.kpi_id),
+            "priority": priority,
+            "action_type": action_type,
+            "status": new_status,
+        },
+    )
     logger.info(
         "Decision made for insight %s: priority=%s, action=%s, status=%s",
         insight_event_id,

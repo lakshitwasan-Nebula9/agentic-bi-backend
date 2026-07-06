@@ -13,6 +13,7 @@ from app.schemas.decision import (
     DecisionRejectRequest,
 )
 from app.services import decision_service
+from app.services.audit_service import record_audit
 
 router = APIRouter(tags=["decisions"])
 
@@ -101,13 +102,23 @@ def approve_decision(
             status_code=400,
             detail=f"Decision is not awaiting approval (current status: {record.status})",
         )
-    return decision_crud.update_decision(
+    updated = decision_crud.update_decision(
         db,
         record,
         status="approved",
         approved_by=current_user.id,
         approved_at=datetime.now(UTC),
     )
+    record_audit(
+        db,
+        action="decision.approved",
+        entity_type="decision",
+        entity_id=decision_id,
+        actor_id=current_user.id,
+        actor_role=current_user.role.value,
+        summary=f"Decision {decision_id} approved",
+    )
+    return updated
 
 
 @router.post("/decisions/{decision_id}/reject", response_model=DecisionRecordResponse)
@@ -126,7 +137,7 @@ def reject_decision(
             status_code=400,
             detail=f"Decision is not awaiting approval (current status: {record.status})",
         )
-    return decision_crud.update_decision(
+    updated = decision_crud.update_decision(
         db,
         record,
         status="rejected",
@@ -134,3 +145,14 @@ def reject_decision(
         approved_at=datetime.now(UTC),
         rejection_reason=body.reason,
     )
+    record_audit(
+        db,
+        action="decision.rejected",
+        entity_type="decision",
+        entity_id=decision_id,
+        actor_id=current_user.id,
+        actor_role=current_user.role.value,
+        summary=f"Decision {decision_id} rejected",
+        details={"reason": body.reason},
+    )
+    return updated
