@@ -7,6 +7,13 @@ engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=300,
+    # Supabase's session-mode pooler caps ALL clients combined at 15 connections.
+    # SQLAlchemy's defaults (pool_size=5, max_overflow=10) let this app alone
+    # claim all 15, starving every other client (other devs, migration scripts,
+    # CI). Keep this app's ceiling well under the shared budget.
+    pool_size=3,
+    max_overflow=2,
+    pool_timeout=10,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

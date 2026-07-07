@@ -25,6 +25,9 @@ class InsightEventResponse(BaseModel):
     llm_summary: str | None = None
     narrated_at: datetime | None = None
 
+    is_suppressed: bool = False
+    suppression_score: float | None = None
+
     created_at: datetime
 
     model_config = {"from_attributes": True}
