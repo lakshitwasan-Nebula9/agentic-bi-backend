@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.crud import insight_feedback as feedback_crud
+from app.crud import notification as notification_crud
 from app.models.embeddings import EmbeddingRecord
 from app.models.insight import InsightEvent
 from app.models.insight_feedback import InsightFeedback
@@ -30,6 +31,13 @@ logger = logging.getLogger(__name__)
 SUPPRESSION_LOOKBACK_DAYS = 90
 SUPPRESSION_DISTANCE_THRESHOLD = 0.15  # cosine distance; lower = more similar
 SUPPRESSION_MIN_DISTINCT_DOWN_USERS = 2
+
+# Extends the app's informal notification_type vocabulary (see the
+# _EVENT_TYPE-style constants in notification_fanout.py for the Redis-driven
+# ones — there is no formal enum type to hook into). Written synchronously
+# from submit_feedback, not via the Redis fanout, since it reacts to a direct
+# user action rather than an agent pipeline event.
+INSIGHT_FEEDBACK_RECORDED = "insight_feedback_recorded"
 
 
 def _signature(insight: InsightEvent) -> str:
@@ -47,6 +55,9 @@ def submit_feedback(
     rating: str,
     comment: str | None,
 ) -> InsightFeedback:
+    previous = feedback_crud.get_active(db, insight.id, user.id)
+    previous_rating = previous.rating if previous else None
+
     feedback = feedback_crud.upsert(
         db,
         insight_id=insight.id,
@@ -69,6 +80,15 @@ def submit_feedback(
     if rating == "down":
         _store_suppression_vector(db, insight, comment)
 
+    _notify_feedback_recorded(
+        db,
+        insight=insight,
+        user=user,
+        rating=rating,
+        comment=comment,
+        rating_changed=rating != previous_rating,
+    )
+
     return feedback
 
 
@@ -85,6 +105,7 @@ def retract_feedback(db: Session, *, insight_id: uuid.UUID, user: User) -> bool:
         actor_id=user.id,
         summary=f"Feedback retracted on insight {insight_id}",
     )
+    _suppress_unread_feedback_notification(db, user_id=user.id, insight_id=insight_id)
     return True
 
 
@@ -99,6 +120,85 @@ def get_summary(
         thumbs_down=thumbs_down,
         my_feedback=mine,
     )
+
+
+def _feedback_notification_body(insight: InsightEvent, rating: str, comment: str | None) -> str:
+    title = insight.llm_title or f"this {insight.insight_type} insight"
+    if rating == "up":
+        return f'You marked "{title}" as helpful'
+    if comment:
+        return f'You marked "{title}" as unhelpful, with a comment'
+    return f'You marked "{title}" as unhelpful'
+
+
+def _notify_feedback_recorded(
+    db: Session,
+    *,
+    insight: InsightEvent,
+    user: User,
+    rating: str,
+    comment: str | None,
+    rating_changed: bool,
+) -> None:
+    """Best-effort bell notification for the acting user.
+
+    Idempotent per *vote*, not per POST: re-submitting the same rating (e.g.
+    the down-vote flow firing once on click and again when the optional
+    comment is attached) updates the existing notification in place instead of
+    creating a second one. A new row is only created when the rating itself
+    changes (up<->down) or after a retract+revote, since that's a genuinely
+    new action worth surfacing again.
+    """
+    try:
+        body = _feedback_notification_body(insight, rating, comment)
+        source_id = str(insight.id)
+
+        if not rating_changed:
+            existing = notification_crud.get_latest_for_source(
+                db, user.id, INSIGHT_FEEDBACK_RECORDED, "insight", source_id
+            )
+            if existing is not None:
+                notification_crud.update_notification(
+                    db, existing, title="Feedback recorded", body=body
+                )
+                return
+
+        notification_crud.create_notification(
+            db,
+            user_id=user.id,
+            notification_type=INSIGHT_FEEDBACK_RECORDED,
+            title="Feedback recorded",
+            body=body,
+            severity="info",
+            source_id=source_id,
+            source_type="insight",
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to write feedback-recorded notification for insight %s",
+            insight.id,
+            exc_info=True,
+        )
+
+
+def _suppress_unread_feedback_notification(
+    db: Session, *, user_id: uuid.UUID, insight_id: uuid.UUID
+) -> None:
+    """On retract, don't notify — just clear the prior unread notification, if any.
+
+    "You removed your feedback" isn't actionable, so no new notification is
+    written; an already-read notification is left alone as history.
+    """
+    try:
+        existing = notification_crud.get_latest_for_source(
+            db, user_id, INSIGHT_FEEDBACK_RECORDED, "insight", str(insight_id)
+        )
+        if existing is not None and not existing.is_read:
+            notification_crud.delete_notification(db, existing)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to suppress feedback notification for insight %s", insight_id, exc_info=True
+        )
 
 
 def _store_suppression_vector(db: Session, insight: InsightEvent, comment: str | None) -> None:

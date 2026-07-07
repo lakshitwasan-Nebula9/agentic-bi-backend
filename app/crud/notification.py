@@ -71,3 +71,53 @@ def mark_all_read(db: Session, user_id: uuid.UUID) -> int:
     )
     db.commit()
     return updated
+
+
+def get_latest_for_source(
+    db: Session,
+    user_id: uuid.UUID,
+    notification_type: str,
+    source_type: str,
+    source_id: str,
+) -> Notification | None:
+    """Most recent notification for one (user, type, source) triple.
+
+    Used to upsert-in-place for repeat actions on the same underlying event
+    (e.g. re-submitting the same insight-feedback rating just to attach a
+    comment) instead of spamming a duplicate notification per call.
+    """
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.notification_type == notification_type,
+            Notification.source_type == source_type,
+            Notification.source_id == source_id,
+        )
+        .order_by(Notification.created_at.desc())
+        .first()
+    )
+
+
+def update_notification(
+    db: Session,
+    notification: Notification,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    severity: str | None = None,
+) -> Notification:
+    if title is not None:
+        notification.title = title
+    if body is not None:
+        notification.body = body
+    if severity is not None:
+        notification.severity = severity
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def delete_notification(db: Session, notification: Notification) -> None:
+    db.delete(notification)
+    db.commit()

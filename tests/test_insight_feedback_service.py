@@ -38,7 +38,9 @@ def test_submit_feedback_upserts_and_audits():
         patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
         patch("app.services.insight_feedback_service.record_audit") as mock_audit,
         patch.object(svc, "_store_suppression_vector") as mock_store_vec,
+        patch.object(svc, "_notify_feedback_recorded"),
     ):
+        mock_crud.get_active.return_value = None
         mock_crud.upsert.return_value = MagicMock(spec=InsightFeedback)
         result = svc.submit_feedback(db, insight=insight, user=user, rating="up", comment="great")
 
@@ -56,10 +58,12 @@ def test_submit_down_feedback_stores_suppression_vector():
     db = MagicMock()
 
     with (
-        patch("app.services.insight_feedback_service.feedback_crud"),
+        patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
         patch("app.services.insight_feedback_service.record_audit"),
         patch.object(svc, "_store_suppression_vector") as mock_store_vec,
+        patch.object(svc, "_notify_feedback_recorded"),
     ):
+        mock_crud.get_active.return_value = None
         svc.submit_feedback(db, insight=insight, user=user, rating="down", comment="too generic")
 
     mock_store_vec.assert_called_once_with(db, insight, "too generic")
@@ -80,11 +84,104 @@ def test_retract_feedback_soft_deletes_existing():
     with (
         patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
         patch("app.services.insight_feedback_service.record_audit") as mock_audit,
+        patch.object(svc, "_suppress_unread_feedback_notification") as mock_suppress,
     ):
         mock_crud.get_active.return_value = existing
-        assert svc.retract_feedback(db, insight_id=uuid.uuid4(), user=user) is True
+        insight_id = uuid.uuid4()
+        assert svc.retract_feedback(db, insight_id=insight_id, user=user) is True
     mock_crud.soft_delete.assert_called_once_with(db, existing)
     mock_audit.assert_called_once()
+    mock_suppress.assert_called_once_with(db, user_id=user.id, insight_id=insight_id)
+
+
+def test_submit_feedback_creates_notification_on_first_vote():
+    insight = _insight(llm_title="Orders dipped 20%")
+    user = _user()
+    db = MagicMock()
+
+    with (
+        patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
+        patch("app.services.insight_feedback_service.record_audit"),
+        patch.object(svc, "_store_suppression_vector"),
+        patch("app.services.insight_feedback_service.notification_crud") as mock_notif,
+    ):
+        mock_crud.get_active.return_value = None  # no prior vote
+        svc.submit_feedback(db, insight=insight, user=user, rating="up", comment=None)
+
+    mock_notif.get_latest_for_source.assert_not_called()
+    mock_notif.create_notification.assert_called_once()
+    kwargs = mock_notif.create_notification.call_args.kwargs
+    assert kwargs["notification_type"] == svc.INSIGHT_FEEDBACK_RECORDED
+    assert kwargs["source_type"] == "insight"
+    assert kwargs["source_id"] == str(insight.id)
+    assert "helpful" in kwargs["body"]
+
+
+def test_resubmitting_same_rating_updates_existing_notification_not_create_new():
+    insight = _insight(llm_title="Orders dipped 20%")
+    user = _user()
+    db = MagicMock()
+    prior_feedback = MagicMock(rating="down")
+    existing_notification = MagicMock()
+
+    with (
+        patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
+        patch("app.services.insight_feedback_service.record_audit"),
+        patch.object(svc, "_store_suppression_vector"),
+        patch("app.services.insight_feedback_service.notification_crud") as mock_notif,
+    ):
+        mock_crud.get_active.return_value = prior_feedback  # already voted "down"
+        mock_notif.get_latest_for_source.return_value = existing_notification
+        # Same rating re-posted with a comment attached (down-vote comment flow).
+        svc.submit_feedback(db, insight=insight, user=user, rating="down", comment="too generic")
+
+    mock_notif.create_notification.assert_not_called()
+    mock_notif.update_notification.assert_called_once()
+    args, kwargs = mock_notif.update_notification.call_args
+    assert args[1] is existing_notification
+    assert "unhelpful, with a comment" in kwargs["body"]
+
+
+def test_changing_rating_creates_a_new_notification():
+    insight = _insight()
+    user = _user()
+    db = MagicMock()
+    prior_feedback = MagicMock(rating="down")
+
+    with (
+        patch("app.services.insight_feedback_service.feedback_crud") as mock_crud,
+        patch("app.services.insight_feedback_service.record_audit"),
+        patch.object(svc, "_store_suppression_vector"),
+        patch("app.services.insight_feedback_service.notification_crud") as mock_notif,
+    ):
+        mock_crud.get_active.return_value = prior_feedback  # previously "down"
+        svc.submit_feedback(db, insight=insight, user=user, rating="up", comment=None)
+
+    mock_notif.get_latest_for_source.assert_not_called()
+    mock_notif.update_notification.assert_not_called()
+    mock_notif.create_notification.assert_called_once()
+
+
+def test_retract_deletes_unread_notification():
+    db = MagicMock()
+    unread = MagicMock(is_read=False)
+    with patch("app.services.insight_feedback_service.notification_crud") as mock_notif:
+        mock_notif.get_latest_for_source.return_value = unread
+        svc._suppress_unread_feedback_notification(
+            db, user_id=uuid.uuid4(), insight_id=uuid.uuid4()
+        )
+    mock_notif.delete_notification.assert_called_once_with(db, unread)
+
+
+def test_retract_leaves_read_notification_alone():
+    db = MagicMock()
+    read = MagicMock(is_read=True)
+    with patch("app.services.insight_feedback_service.notification_crud") as mock_notif:
+        mock_notif.get_latest_for_source.return_value = read
+        svc._suppress_unread_feedback_notification(
+            db, user_id=uuid.uuid4(), insight_id=uuid.uuid4()
+        )
+    mock_notif.delete_notification.assert_not_called()
 
 
 def _vote(insight_id: uuid.UUID, user_id: uuid.UUID | None = None) -> MagicMock:
