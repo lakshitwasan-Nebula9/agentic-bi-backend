@@ -6,19 +6,21 @@ from sqlalchemy.orm import Session
 
 from app.crud import dashboard as dashboard_crud
 from app.crud import user as user_crud
-from app.models.dashboard import Dashboard, DashboardWidget
+from app.models.dashboard import Dashboard, DashboardPermission, DashboardWidget
 from app.models.dataset import Dataset
 from app.models.kpi import KPIDefinition, KPISnapshot
 from app.models.user import ROLE_RANK, User, UserRole
 from app.schemas.dashboard import (
+    DashboardAccessLevel,
     DashboardCreate,
+    DashboardPermissionResponse,
     DashboardUpdate,
     WidgetCreate,
     WidgetLayoutUpdate,
     WidgetUpdate,
 )
 from app.schemas.kpi import KPIResponse
-from app.services import kpi_service
+from app.services import audit_service, kpi_service
 
 # Number of certified KPIs to seed a preconfigured dashboard with.
 _PRECONFIG_KPI_LIMIT = 8
@@ -50,22 +52,80 @@ def _lower_roles(viewer: User) -> list[UserRole]:
     return [r for r in UserRole if ROLE_RANK[r] > ROLE_RANK[viewer.role]]
 
 
+def get_effective_access(
+    db: Session, dashboard: Dashboard, user: User
+) -> DashboardAccessLevel | None:
+    """Resolve a user's access to a dashboard.
+
+    Owner → write. Otherwise the best of an explicit permission grant and the
+    implicit role-hierarchy read (owner strictly lower-ranked than the viewer).
+    None → no access (surfaced as 404 to avoid leaking dashboard existence).
+    """
+    if dashboard.owner_id == user.id:
+        return DashboardAccessLevel.WRITE
+    grant = dashboard_crud.get_permission(db, dashboard.id, user.id)
+    if grant is not None and grant.access_level == DashboardAccessLevel.WRITE:
+        return DashboardAccessLevel.WRITE
+    if grant is not None:
+        return DashboardAccessLevel.READ
+    owner = user_crud.get_user_by_id(db, dashboard.owner_id)
+    if owner is not None and ROLE_RANK[owner.role] > ROLE_RANK[user.role]:
+        return DashboardAccessLevel.READ
+    return None
+
+
+def _with_access(dashboard: Dashboard, access: DashboardAccessLevel | None) -> Dashboard:
+    """Attach the caller's effective access so DashboardResponse.my_access picks
+    it up via from_attributes (plain instance attribute, not a column)."""
+    dashboard.my_access = access
+    return dashboard
+
+
 def get_viewable_dashboard_or_404(db: Session, dashboard_id: uuid.UUID, viewer: User) -> Dashboard:
-    """View access: the viewer's own dashboards, plus any owned by a strictly
-    lower-ranked user (read-only — writes still go through get_owned_dashboard_or_404)."""
     dashboard = dashboard_crud.get_dashboard(db, dashboard_id)
     if dashboard is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
-    if dashboard.owner_id == viewer.id:
-        return dashboard
-    owner = user_crud.get_user_by_id(db, dashboard.owner_id)
-    if owner is not None and ROLE_RANK[owner.role] > ROLE_RANK[viewer.role]:
-        return dashboard
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+    access = get_effective_access(db, dashboard, viewer)
+    if access is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+    return _with_access(dashboard, access)
+
+
+def get_writable_dashboard_or_404(db: Session, dashboard_id: uuid.UUID, actor: User) -> Dashboard:
+    """Write access: the owner or a user holding an explicit write grant.
+
+    No access at all → 404 (as everywhere); read-only access → 403 so the
+    caller knows the dashboard exists but is not theirs to edit.
+    """
+    dashboard = dashboard_crud.get_dashboard(db, dashboard_id)
+    if dashboard is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+    access = get_effective_access(db, dashboard, actor)
+    if access is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+    if access != DashboardAccessLevel.WRITE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have write access to this dashboard",
+        )
+    return _with_access(dashboard, access)
 
 
 def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
-    return dashboard_crud.list_viewable_dashboards(db, viewer.id, _lower_roles(viewer))
+    dashboards = dashboard_crud.list_viewable_dashboards(db, viewer.id, _lower_roles(viewer))
+    grants = {
+        g.dashboard_id: g.access_level
+        for g in db.query(DashboardPermission).filter(DashboardPermission.user_id == viewer.id)
+    }
+    for dashboard in dashboards:
+        if dashboard.owner_id == viewer.id:
+            access = DashboardAccessLevel.WRITE
+        elif grants.get(dashboard.id) == DashboardAccessLevel.WRITE:
+            access = DashboardAccessLevel.WRITE
+        else:
+            access = DashboardAccessLevel.READ
+        _with_access(dashboard, access)
+    return dashboards
 
 
 def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID) -> Dashboard:
@@ -85,7 +145,7 @@ def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID)
     dashboard = dashboard_crud.create_dashboard(db, dashboard)
     if payload.connector_id is not None:
         _preconfigure_widgets(db, dashboard, payload.connector_id)
-    return dashboard
+    return _with_access(dashboard, DashboardAccessLevel.WRITE)
 
 
 def _widget_kpi_ids(db: Session, dashboard_id: uuid.UUID) -> list[uuid.UUID]:
@@ -282,30 +342,33 @@ def _preconfigure_widgets(db: Session, dashboard: Dashboard, connector_id: uuid.
 
 
 def update_dashboard(
-    db: Session, dashboard_id: uuid.UUID, payload: DashboardUpdate, owner_id: uuid.UUID
+    db: Session, dashboard_id: uuid.UUID, payload: DashboardUpdate, actor: User
 ) -> Dashboard:
-    dashboard = get_owned_dashboard_or_404(db, dashboard_id, owner_id)
+    dashboard = get_writable_dashboard_or_404(db, dashboard_id, actor)
     updates = payload.model_dump(exclude_unset=True)
-    return dashboard_crud.update_dashboard(db, dashboard, updates)
+    return _with_access(
+        dashboard_crud.update_dashboard(db, dashboard, updates), dashboard.my_access
+    )
 
 
 def delete_dashboard(db: Session, dashboard_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    # Deleting stays owner-only — a write grant covers content, not the dashboard itself.
     dashboard = get_owned_dashboard_or_404(db, dashboard_id, owner_id)
     dashboard_crud.delete_dashboard(db, dashboard)
 
 
 def add_widget(
-    db: Session, dashboard_id: uuid.UUID, payload: WidgetCreate, owner_id: uuid.UUID
+    db: Session, dashboard_id: uuid.UUID, payload: WidgetCreate, actor: User
 ) -> DashboardWidget:
-    get_owned_dashboard_or_404(db, dashboard_id, owner_id)
+    get_writable_dashboard_or_404(db, dashboard_id, actor)
     widget = DashboardWidget(dashboard_id=dashboard_id, **payload.model_dump())
     return dashboard_crud.create_widget(db, widget)
 
 
-def get_owned_widget_or_404(
-    db: Session, dashboard_id: uuid.UUID, widget_id: uuid.UUID, owner_id: uuid.UUID
+def get_writable_widget_or_404(
+    db: Session, dashboard_id: uuid.UUID, widget_id: uuid.UUID, actor: User
 ) -> DashboardWidget:
-    get_owned_dashboard_or_404(db, dashboard_id, owner_id)
+    get_writable_dashboard_or_404(db, dashboard_id, actor)
     widget = dashboard_crud.get_widget(db, widget_id)
     if widget is None or widget.dashboard_id != dashboard_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Widget not found")
@@ -317,24 +380,22 @@ def update_widget(
     dashboard_id: uuid.UUID,
     widget_id: uuid.UUID,
     payload: WidgetUpdate,
-    owner_id: uuid.UUID,
+    actor: User,
 ) -> DashboardWidget:
-    widget = get_owned_widget_or_404(db, dashboard_id, widget_id, owner_id)
+    widget = get_writable_widget_or_404(db, dashboard_id, widget_id, actor)
     updates = payload.model_dump(exclude_unset=True)
     return dashboard_crud.update_widget(db, widget, updates)
 
 
-def delete_widget(
-    db: Session, dashboard_id: uuid.UUID, widget_id: uuid.UUID, owner_id: uuid.UUID
-) -> None:
-    widget = get_owned_widget_or_404(db, dashboard_id, widget_id, owner_id)
+def delete_widget(db: Session, dashboard_id: uuid.UUID, widget_id: uuid.UUID, actor: User) -> None:
+    widget = get_writable_widget_or_404(db, dashboard_id, widget_id, actor)
     dashboard_crud.delete_widget(db, widget)
 
 
 def save_layout(
-    db: Session, dashboard_id: uuid.UUID, layout: list[WidgetLayoutUpdate], owner_id: uuid.UUID
+    db: Session, dashboard_id: uuid.UUID, layout: list[WidgetLayoutUpdate], actor: User
 ) -> Dashboard:
-    dashboard = get_owned_dashboard_or_404(db, dashboard_id, owner_id)
+    dashboard = get_writable_dashboard_or_404(db, dashboard_id, actor)
     widgets_by_id = {widget.id: widget for widget in dashboard.widgets}
 
     for entry in layout:
@@ -352,3 +413,87 @@ def save_layout(
     db.commit()
     db.refresh(dashboard)
     return dashboard
+
+
+def _permission_response(
+    permission: DashboardPermission, grantee: User
+) -> DashboardPermissionResponse:
+    return DashboardPermissionResponse(
+        id=permission.id,
+        dashboard_id=permission.dashboard_id,
+        user_id=permission.user_id,
+        user_email=grantee.email,
+        user_name=grantee.name,
+        user_role=grantee.role,
+        access_level=DashboardAccessLevel(permission.access_level),
+        granted_by=permission.granted_by,
+        created_at=permission.created_at,
+        updated_at=permission.updated_at,
+    )
+
+
+def list_permissions(
+    db: Session, dashboard_id: uuid.UUID, actor: User
+) -> list[DashboardPermissionResponse]:
+    # Managing (and seeing) the sharing panel requires write access.
+    get_writable_dashboard_or_404(db, dashboard_id, actor)
+    return [
+        _permission_response(permission, grantee)
+        for permission, grantee in dashboard_crud.list_permissions(db, dashboard_id)
+    ]
+
+
+def grant_permission(
+    db: Session,
+    dashboard_id: uuid.UUID,
+    target_user_id: uuid.UUID,
+    access_level: DashboardAccessLevel,
+    actor: User,
+) -> DashboardPermissionResponse:
+    dashboard = get_writable_dashboard_or_404(db, dashboard_id, actor)
+    target = user_crud.get_user_by_id(db, target_user_id)
+    if target is None or not target.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if target.id == dashboard.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The dashboard owner already has full access",
+        )
+    permission = dashboard_crud.upsert_permission(
+        db, dashboard_id, target.id, access_level.value, granted_by=actor.id
+    )
+    audit_service.record_audit(
+        db,
+        action="dashboard.permission_granted",
+        entity_type="dashboard",
+        entity_id=dashboard_id,
+        actor_id=actor.id,
+        actor_role=actor.role.value,
+        summary=f"Granted {access_level.value} access on '{dashboard.name}' to {target.email}",
+        details={"user_id": str(target.id), "access_level": access_level.value},
+    )
+    return _permission_response(permission, target)
+
+
+def revoke_permission(
+    db: Session, dashboard_id: uuid.UUID, target_user_id: uuid.UUID, actor: User
+) -> None:
+    dashboard = get_writable_dashboard_or_404(db, dashboard_id, actor)
+    permission = dashboard_crud.get_permission(db, dashboard_id, target_user_id)
+    if permission is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found")
+    target = user_crud.get_user_by_id(db, target_user_id)
+    dashboard_crud.delete_permission(db, permission)
+    audit_service.record_audit(
+        db,
+        action="dashboard.permission_revoked",
+        entity_type="dashboard",
+        entity_id=dashboard_id,
+        actor_id=actor.id,
+        actor_role=actor.role.value,
+        summary=(
+            f"Revoked access on '{dashboard.name}' for "
+            f"{target.email if target else target_user_id}"
+        ),
+        details={"user_id": str(target_user_id)},
+    )

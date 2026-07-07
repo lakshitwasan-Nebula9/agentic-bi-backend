@@ -2,7 +2,7 @@ from app.models.approval_request import ApprovalRequest
 from app.models.audit_log import AuditLog
 from app.models.connector import DataConnector
 from app.models.copilot import ChatMessage, ChatSession
-from app.models.dashboard import Dashboard, DashboardWidget
+from app.models.dashboard import Dashboard, DashboardPermission, DashboardWidget
 from app.models.dataset import Dataset, DatasetRecord
 from app.models.decision import DecisionRecord
 from app.models.embeddings import EmbeddingRecord
@@ -24,6 +24,7 @@ __all__ = [
     "DecisionRecord",
     "DataConnector",
     "Dashboard",
+    "DashboardPermission",
     "DashboardWidget",
     "Dataset",
     "DatasetRecord",
