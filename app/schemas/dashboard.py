@@ -1,7 +1,15 @@
+import enum
 import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, field_validator
+
+from app.models.user import UserRole
+
+
+class DashboardAccessLevel(str, enum.Enum):
+    READ = "read"
+    WRITE = "write"
 
 
 def _normalize_category(value: str | None) -> str | None:
@@ -97,6 +105,9 @@ class DashboardResponse(BaseModel):
     is_default: bool
     created_at: datetime
     updated_at: datetime
+    # Caller's effective access ("read" | "write"), attached by the service so
+    # the frontend knows whether to show edit controls / the permissions panel.
+    my_access: DashboardAccessLevel | None = None
 
     class Config:
         from_attributes = True
@@ -104,3 +115,23 @@ class DashboardResponse(BaseModel):
 
 class DashboardDetailResponse(DashboardResponse):
     widgets: list[WidgetResponse] = []
+
+
+class DashboardPermissionUpsert(BaseModel):
+    access_level: DashboardAccessLevel
+
+
+class DashboardPermissionResponse(BaseModel):
+    id: uuid.UUID
+    dashboard_id: uuid.UUID
+    user_id: uuid.UUID
+    user_email: str
+    user_name: str | None
+    user_role: UserRole
+    access_level: DashboardAccessLevel
+    granted_by: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

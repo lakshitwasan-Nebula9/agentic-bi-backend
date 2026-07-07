@@ -449,13 +449,14 @@ def test_manager_can_view_but_not_edit_analyst_dashboard():
         # ...and it shows up in the manager's list.
         listed = client.get("/api/v1/dashboards", headers=_auth_headers(manager_token))
         assert any(d["id"] == dash_id for d in listed.json())
-        # But view is read-only: writes are still owner-only (404 for non-owner).
+        # But view is read-only: editing needs a write grant (403 — visible,
+        # not editable), and deleting stays owner-only (404).
         patched = client.patch(
             f"/api/v1/dashboards/{dash_id}",
             headers=_auth_headers(manager_token),
             json={"name": "Hijacked"},
         )
-        assert patched.status_code == 404
+        assert patched.status_code == 403
         deleted = client.delete(
             f"/api/v1/dashboards/{dash_id}", headers=_auth_headers(manager_token)
         )

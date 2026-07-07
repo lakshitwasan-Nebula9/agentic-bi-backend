@@ -9,6 +9,8 @@ from app.models.user import User
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardDetailResponse,
+    DashboardPermissionResponse,
+    DashboardPermissionUpsert,
     DashboardResponse,
     DashboardUpdate,
     WidgetCreate,
@@ -59,7 +61,7 @@ def update_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.update_dashboard(db, dashboard_id, payload, owner_id=current_user.id)
+    return dashboard_service.update_dashboard(db, dashboard_id, payload, actor=current_user)
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -78,7 +80,7 @@ def save_layout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.save_layout(db, dashboard_id, payload, owner_id=current_user.id)
+    return dashboard_service.save_layout(db, dashboard_id, payload, actor=current_user)
 
 
 @router.post(
@@ -90,7 +92,7 @@ def add_widget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.add_widget(db, dashboard_id, payload, owner_id=current_user.id)
+    return dashboard_service.add_widget(db, dashboard_id, payload, actor=current_user)
 
 
 @router.patch("/{dashboard_id}/widgets/{widget_id}", response_model=WidgetResponse)
@@ -101,9 +103,7 @@ def update_widget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return dashboard_service.update_widget(
-        db, dashboard_id, widget_id, payload, owner_id=current_user.id
-    )
+    return dashboard_service.update_widget(db, dashboard_id, widget_id, payload, actor=current_user)
 
 
 @router.delete("/{dashboard_id}/widgets/{widget_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -113,4 +113,42 @@ def delete_widget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    dashboard_service.delete_widget(db, dashboard_id, widget_id, owner_id=current_user.id)
+    dashboard_service.delete_widget(db, dashboard_id, widget_id, actor=current_user)
+
+
+@router.get("/{dashboard_id}/permissions", response_model=list[DashboardPermissionResponse])
+def list_dashboard_permissions(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return dashboard_service.list_permissions(db, dashboard_id, actor=current_user)
+
+
+@router.put(
+    "/{dashboard_id}/permissions/{user_id}",
+    response_model=DashboardPermissionResponse,
+)
+def upsert_dashboard_permission(
+    dashboard_id: uuid.UUID,
+    user_id: uuid.UUID,
+    payload: DashboardPermissionUpsert,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return dashboard_service.grant_permission(
+        db, dashboard_id, user_id, payload.access_level, actor=current_user
+    )
+
+
+@router.delete(
+    "/{dashboard_id}/permissions/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def revoke_dashboard_permission(
+    dashboard_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    dashboard_service.revoke_permission(db, dashboard_id, user_id, actor=current_user)
