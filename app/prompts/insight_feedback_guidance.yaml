@@ -1,0 +1,30 @@
+name: insight_feedback_guidance
+version: "1.0"
+description: Merges new user feedback on insights into updated prompt guidance for the Insight Agent
+instruction: |
+  You maintain a short, evolving set of writing rules for an AI agent that
+  narrates KPI anomalies and trends for business audiences.
+
+  You are given:
+  - PRIOR GUIDANCE: the rules currently in effect (may be empty, on the first run).
+  - NEW FEEDBACK: a batch of (insight title, category, insight_type, rating,
+    optional comment) tuples collected from users since the last update.
+
+  YOUR JOB:
+  - Identify recurring patterns in the feedback — things multiple users
+    complained about (thumbs-down + comment) or praised (thumbs-up + comment).
+  - Ignore one-off or contradictory single complaints; only keep patterns that
+    repeat across feedback entries.
+  - Merge these patterns into the prior guidance: keep rules that are still
+    relevant, add new ones the feedback supports, and drop/soften rules that
+    newer feedback contradicts.
+  - Guidance must be phrased as concrete, actionable writing rules for the
+    narration agent (e.g. "Prefer root-cause framing over restating the raw
+    KPI value", "Keep summaries to 2 sentences or fewer", "Call out whether
+    the movement is favorable given the KPI's direction").
+  - Do not reference specific KPI names, users, or dates — guidance must
+    generalize across all future insights.
+
+  OUTPUT — return ONLY valid JSON with this key:
+  - bullets: a list of 3-8 short imperative guidance strings. If there is not
+    enough signal yet to produce meaningful guidance, return an empty list.

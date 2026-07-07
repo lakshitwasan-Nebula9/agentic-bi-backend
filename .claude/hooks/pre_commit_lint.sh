@@ -6,6 +6,8 @@
 # shell that hasn't activated the venv (e.g. spawned non-interactively).
 if [ -x "venv/bin/ruff" ]; then
   PATH="$PWD/venv/bin:$PATH"
+elif [ -x "venv/Scripts/ruff.exe" ]; then
+  PATH="$PWD/venv/Scripts:$PATH"
 fi
 
 ruff_ok=0

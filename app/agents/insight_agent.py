@@ -67,9 +67,19 @@ trend_slope_pct (per month): {context.get("trend_slope")}
 insight_type: {context.get("insight_type")}
 
 Recent monthly values (oldest first): {recent_text}
-
+{_guidance_section(context.get("guidance"))}
 Return ONLY valid JSON.
 """.strip()
+
+
+def _guidance_section(guidance: str | None) -> str:
+    if not guidance:
+        return ""
+    return f"""
+
+Guidance from past user feedback on insights — follow these when writing:
+{guidance}
+"""
 
 
 async def narrate(context: dict) -> InsightNarrative | None:

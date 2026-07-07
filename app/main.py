@@ -25,6 +25,7 @@ from app.routers import (
     users,
 )
 from app.services import notification_fanout
+from app.services.insight_guidance_scheduler import create_scheduler as create_guidance_scheduler
 from app.services.report_scheduler import create_scheduler
 
 
@@ -33,9 +34,12 @@ async def lifespan(app: FastAPI):
     fanout_task = asyncio.create_task(notification_fanout.run())
     scheduler = create_scheduler()
     scheduler.start()
+    guidance_scheduler = create_guidance_scheduler()
+    guidance_scheduler.start()
     try:
         yield
     finally:
+        guidance_scheduler.shutdown(wait=False)
         scheduler.shutdown(wait=False)
         fanout_task.cancel()
         try:

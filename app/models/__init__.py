@@ -8,6 +8,8 @@ from app.models.decision import DecisionRecord
 from app.models.embeddings import EmbeddingRecord
 from app.models.explanation import InsightExplanation
 from app.models.insight import InsightEvent
+from app.models.insight_feedback import InsightFeedback
+from app.models.insight_guidance import InsightGuidance
 from app.models.kpi import KPIDefinition, KPISnapshot, KPIVersion
 from app.models.notification import Notification
 from app.models.org_settings import OrgSettings
@@ -31,6 +33,8 @@ __all__ = [
     "EmbeddingRecord",
     "InsightExplanation",
     "InsightEvent",
+    "InsightFeedback",
+    "InsightGuidance",
     "KPIDefinition",
     "KPISnapshot",
     "KPIVersion",
