@@ -1,10 +1,17 @@
+import asyncio
+import json
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+import redis.asyncio as aioredis
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.agents.messaging import DASHBOARD_PERMISSION_CHANGED, stream_name
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, resolve_sse_user
 from app.models.user import User
 from app.schemas.dashboard import (
     DashboardCreate,
@@ -21,6 +28,8 @@ from app.schemas.dashboard import (
 from app.services import dashboard_service, insight_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
+
+_optional_bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED)
@@ -43,6 +52,71 @@ def list_dashboards(
     current_user: User = Depends(get_current_user),
 ):
     return dashboard_service.list_dashboards(db, current_user)
+
+
+@router.get("/stream")
+async def stream_permission_changes(
+    token: str | None = Query(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    db: Session = Depends(get_db),
+):
+    """SSE stream of the caller's dashboard permission changes — Redis-driven.
+
+    Tails the ``dashboard_permission_changed`` stream and forwards only events
+    addressed to the authenticated user, so their UI can refetch access the
+    instant a grant/upgrade/revoke happens. EventSource cannot set headers, so
+    the JWT may be passed as ``?token=`` (a Bearer header also works). A
+    ``:keepalive`` comment is emitted on idle to keep proxies from timing out.
+
+    Declared before ``/{dashboard_id}`` so the literal path isn't shadowed.
+    """
+    raw_token = (credentials.credentials if credentials else None) or token
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    user = resolve_sse_user(raw_token, db)
+    user_id = str(user.id)
+
+    async def event_generator():
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        stream = stream_name(DASHBOARD_PERMISSION_CHANGED)
+        last_id = "$"  # only events produced after this connection opens
+        try:
+            while True:
+                try:
+                    response = await client.xread({stream: last_id}, block=15000, count=10)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — survive transient broker errors
+                    await asyncio.sleep(1.0)
+                    continue
+
+                if not response:
+                    yield ": keepalive\n\n"  # XREAD block timed out → idle keepalive
+                    continue
+
+                for _stream, messages in response:
+                    for message_id, fields in messages:
+                        last_id = message_id
+                        payload = fields.get("payload")
+                        if not payload:
+                            continue
+                        try:
+                            data = json.loads(payload)
+                        except ValueError:
+                            continue
+                        if data.get("user_id") == user_id:
+                            yield f"data: {payload}\n\n"
+        finally:
+            await client.aclose()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{dashboard_id}", response_model=DashboardDetailResponse)

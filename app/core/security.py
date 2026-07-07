@@ -12,6 +12,29 @@ from app.services.auth_service import decode_access_token
 bearer_scheme = HTTPBearer()
 
 
+def resolve_sse_user(token: str, db: Session) -> User:
+    """Authenticate an SSE connection from a raw JWT.
+
+    EventSource cannot set headers, so SSE endpoints accept the token as a
+    query param and validate it here instead of through the bearer dependency.
+    """
+    exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+    )
+    try:
+        payload = decode_access_token(token)
+    except ValueError:
+        raise exc from None
+    user_id = payload.get("sub")
+    if not user_id:
+        raise exc
+    user = user_crud.get_user_by_id(db, uuid.UUID(user_id))
+    if user is None or not user.is_active:
+        raise exc
+    return user
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
