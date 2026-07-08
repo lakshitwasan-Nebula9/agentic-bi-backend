@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/agentic_bi"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # SQLAlchemy connection pool sizing (see app/core/database.py). Defaults stay low
+    # because Supabase's session-mode pooler caps ALL clients combined at 15 connections;
+    # this app's ceiling (pool_size + max_overflow) must leave room for other devs, CI,
+    # and migrations. Override via env for a dedicated/production pooler with more headroom.
+    DB_POOL_SIZE: int = 3
+    DB_MAX_OVERFLOW: int = 2
+    DB_POOL_TIMEOUT: int = 10
+
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
@@ -23,6 +31,14 @@ class Settings(BaseSettings):
     ]
 
     CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
+
+    # Rate limiting — Redis fixed-window counters (see app/core/rate_limit.py).
+    # Limits use the form "N/second|minute|hour". Auth is keyed by client IP
+    # (unauthenticated brute-force target); the rest by user id with IP fallback.
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/minute"
+    RATE_LIMIT_LLM: str = "20/minute"
+    RATE_LIMIT_DEFAULT: str = "300/minute"
 
     DATA_QUALITY_THRESHOLD: float = 60.0
 

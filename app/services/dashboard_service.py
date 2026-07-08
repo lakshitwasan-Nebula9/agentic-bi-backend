@@ -1,9 +1,11 @@
+import logging
 import uuid
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.agents.messaging import DASHBOARD_PERMISSION_CHANGED, AgentPublisher
 from app.crud import dashboard as dashboard_crud
 from app.crud import user as user_crud
 from app.models.dashboard import Dashboard, DashboardPermission, DashboardWidget
@@ -21,6 +23,37 @@ from app.schemas.dashboard import (
 )
 from app.schemas.kpi import KPIResponse
 from app.services import audit_service, kpi_service
+
+logger = logging.getLogger(__name__)
+
+_publisher = AgentPublisher()
+
+
+def _publish_permission_change(
+    dashboard_id: uuid.UUID, user_id: uuid.UUID, access_level: str | None
+) -> None:
+    """Best-effort: emit a permission change onto Redis for the SSE stream.
+
+    access_level None means the grant was revoked. The grant itself is already
+    persisted, so a broker hiccup is logged and swallowed — the affected user
+    just falls back to picking the change up on their next refetch.
+    """
+    try:
+        _publisher.publish(
+            DASHBOARD_PERMISSION_CHANGED,
+            {
+                "dashboard_id": str(dashboard_id),
+                "user_id": str(user_id),
+                "access_level": access_level,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to publish permission change for dashboard %s to Redis",
+            dashboard_id,
+            exc_info=True,
+        )
+
 
 # Number of certified KPIs to seed a preconfigured dashboard with.
 _PRECONFIG_KPI_LIMIT = 8
@@ -472,6 +505,7 @@ def grant_permission(
         summary=f"Granted {access_level.value} access on '{dashboard.name}' to {target.email}",
         details={"user_id": str(target.id), "access_level": access_level.value},
     )
+    _publish_permission_change(dashboard_id, target.id, access_level.value)
     return _permission_response(permission, target)
 
 
@@ -497,3 +531,4 @@ def revoke_permission(
         ),
         details={"user_id": str(target_user_id)},
     )
+    _publish_permission_change(dashboard_id, target_user_id, None)

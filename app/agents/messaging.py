@@ -17,6 +17,11 @@ STREAM_PREFIX = "events:"
 # Explainability Agent consumes it to build receipts.
 INSIGHT_DETECTED = "insight_detected"
 
+# Emitted when a dashboard permission is granted, changed, or revoked. The SSE
+# endpoint (GET /dashboards/stream) tails this stream and forwards each event to
+# the affected user so their UI refreshes access without a manual reload.
+DASHBOARD_PERMISSION_CHANGED = "dashboard_permission_changed"
+
 
 def stream_name(event_type: str) -> str:
     return f"{STREAM_PREFIX}{event_type}"

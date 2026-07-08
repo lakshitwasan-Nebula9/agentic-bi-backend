@@ -288,3 +288,51 @@ class TestGrantLifecycle:
             assert mine["my_access"] == "write"
         finally:
             _cleanup([dash["id"]], [owner_email])
+
+
+class TestPermissionChangeStream:
+    def test_grant_and_revoke_publish_redis_events(self):
+        """Grants/revokes must land on the dashboard_permission_changed stream
+        so the SSE endpoint can push them to the affected user."""
+        import json
+
+        from app.agents.messaging import DASHBOARD_PERMISSION_CHANGED, get_redis_client, stream_name
+
+        owner_token, owner_email, _ = _signup_role(UserRole.ANALYST)
+        peer_token, peer_email, peer_id = _signup_role(UserRole.ANALYST)
+        dash = _create_dashboard(owner_token, f"perm-stream-{uuid.uuid4().hex}")
+        redis_client = get_redis_client()
+        stream = stream_name(DASHBOARD_PERMISSION_CHANGED)
+
+        def _events_for_dashboard() -> list[dict]:
+            entries = redis_client.xrevrange(stream, count=50)
+            payloads = [json.loads(fields["payload"]) for _id, fields in entries]
+            return [p for p in payloads if p["dashboard_id"] == dash["id"]]
+
+        try:
+            _grant(owner_token, dash["id"], peer_id, "read")
+            events = _events_for_dashboard()
+            assert events, "grant did not publish a permission-change event"
+            assert events[0] == {
+                "dashboard_id": dash["id"],
+                "user_id": peer_id,
+                "access_level": "read",
+            }
+
+            resp = client.delete(
+                f"/api/v1/dashboards/{dash['id']}/permissions/{peer_id}",
+                headers=_auth(owner_token),
+            )
+            assert resp.status_code == 204
+            events = _events_for_dashboard()
+            assert events[0] == {
+                "dashboard_id": dash["id"],
+                "user_id": peer_id,
+                "access_level": None,
+            }
+        finally:
+            _cleanup([dash["id"]], [owner_email, peer_email])
+
+    def test_stream_endpoint_requires_auth(self):
+        resp = client.get("/api/v1/dashboards/stream")
+        assert resp.status_code == 401
