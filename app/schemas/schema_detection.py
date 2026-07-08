@@ -11,6 +11,7 @@ class ColumnInput(BaseModel):
 class SchemaDetectRequest(BaseModel):
     table_name: str
     columns: list[ColumnInput]
+    dataset_id: uuid.UUID | None = None
 
 
 class ColumnAnnotation(BaseModel):

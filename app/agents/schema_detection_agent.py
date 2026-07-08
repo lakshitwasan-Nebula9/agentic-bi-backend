@@ -190,6 +190,7 @@ async def detect(db: Session, request: SchemaDetectRequest) -> SchemaDetectRespo
             date_columns=result.date_columns,
             suggested_kpis=result.suggested_kpis,
             business_questions=result.business_questions,
+            dataset_id=request.dataset_id,
         )
 
         if lf_trace:

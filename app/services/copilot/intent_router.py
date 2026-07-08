@@ -23,7 +23,7 @@ Classify the user's message into exactly one of these intents:
 - greeting: casual conversation, greetings, thanks, "what can you do", "help me"
 - screen_context: the user is asking about something they are CURRENTLY LOOKING AT on screen.
   Triggers:
-  • screen_context contains dashboard_id, kpi_id, insight_id, report_id, or decision_id
+  • screen_context contains widget_id, dashboard_id, kpi_id, insight_id, report_id, or decision_id
   • AND the message uses words like "this", "here", "current", "shown", "on screen",
     "this dashboard", "this KPI", "this chart", "this insight", "summarise this",
     "elaborate", "explain this", "what does this mean", "tell me more"
@@ -42,7 +42,7 @@ Classify the user's message into exactly one of these intents:
 - out_of_scope: anything unrelated to business intelligence, data, or the platform
 
 Rules:
-1. If screen_context has any entity id (dashboard_id, kpi_id, insight_id, report_id,
+1. If screen_context has any entity id (widget_id, dashboard_id, kpi_id, insight_id, report_id,
    decision_id) AND the message is asking about what is on screen → screen_context.
    This is the HIGHEST priority rule.
 2. Words like "this", "here", "current", "elaborate", "summarise", "explain" combined
@@ -72,6 +72,8 @@ def _screen_context_summary(ctx: ScreenContext | None) -> str:
     parts = [f"page={ctx.current_page}"]
     if ctx.dashboard_id:
         parts.append(f"dashboard_id={ctx.dashboard_id}")
+    if ctx.widget_id:
+        parts.append(f"widget_id={ctx.widget_id}")
     if ctx.kpi_id:
         parts.append(f"kpi_id={ctx.kpi_id}")
     if ctx.insight_id:
