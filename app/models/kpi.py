@@ -92,7 +92,6 @@ class KPISnapshot(Base):
         UUID(as_uuid=True),
         ForeignKey("kpi_definitions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     dataset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("datasets.id"), nullable=False
@@ -115,6 +114,16 @@ class KPISnapshot(Base):
             "period_start",
             "period_end",
             unique=True,
+            postgresql_where=text("is_deleted = false"),
+        ),
+        # Hot read path: per-KPI time-series fetched newest-first, live rows only
+        # (kpi_service, explainability, insight, copilot, report services). Replaces
+        # the plain kpi_id FK index — this partial composite is a superset for those reads.
+        Index(
+            "ix_kpi_snapshots_kpi_period_computed_active",
+            "kpi_id",
+            text("period_start DESC NULLS LAST"),
+            text("computed_at DESC"),
             postgresql_where=text("is_deleted = false"),
         ),
     )

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +18,6 @@ class InsightEvent(Base):
         UUID(as_uuid=True),
         ForeignKey("kpi_definitions.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -52,3 +51,15 @@ class InsightEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # Hot read path: insight feed filters live rows (+ optional kpi_id) newest-first
+        # (insight_service.list_insights) and batch reads by kpi_id in connector/dataset
+        # services. Replaces the plain kpi_id FK index — this partial composite is a superset.
+        Index(
+            "ix_insight_events_kpi_created_active",
+            "kpi_id",
+            text("created_at DESC"),
+            postgresql_where=text("is_deleted = false"),
+        ),
+    )
