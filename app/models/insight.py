@@ -52,6 +52,12 @@ class InsightEvent(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Short-term feedback-suppression heuristic (app.services.insight_feedback_service).
+    # Never hides the event — it is still created, narrated, and pushed; the
+    # frontend uses these to badge/gray it out per repeated similar down-votes.
+    is_suppressed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    suppression_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     __table_args__ = (
         # Hot read path: insight feed filters live rows (+ optional kpi_id) newest-first
         # (insight_service.list_insights) and batch reads by kpi_id in connector/dataset

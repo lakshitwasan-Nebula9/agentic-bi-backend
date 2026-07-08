@@ -11,13 +11,21 @@ from sqlalchemy.orm import Session
 from app.agents.messaging import INSIGHT_DETECTED, stream_name
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
+from app.core.security import get_current_user, require_manager
 from app.crud import insight as insight_crud
 from app.crud import user as user_crud
 from app.crud.explanation import get_by_insight
 from app.models.insight import InsightEvent
+from app.models.user import User
 from app.schemas.explanation import InsightExplanationResponse
 from app.schemas.insight import InsightEventResponse
-from app.services import insight_service
+from app.schemas.insight_feedback import (
+    InsightFeedbackCreate,
+    InsightFeedbackResponse,
+    InsightFeedbackSummary,
+)
+from app.schemas.insight_guidance import InsightGuidanceResponse
+from app.services import insight_feedback_service, insight_guidance_service, insight_service
 from app.services.auth_service import decode_access_token
 from app.services.explainability_service import build_explanation
 
@@ -180,3 +188,88 @@ async def get_insight_explanation(insight_id: uuid.UUID, db: Session = Depends(g
     response = InsightExplanationResponse.model_validate(record)
     response.rationale = insight.llm_summary
     return response
+
+
+def _get_insight_or_404(db: Session, insight_id: uuid.UUID) -> InsightEvent:
+    insight = (
+        db.query(InsightEvent)
+        .filter(InsightEvent.id == insight_id, InsightEvent.is_deleted.is_(False))
+        .first()
+    )
+    if insight is None:
+        raise HTTPException(status_code=404, detail=f"Insight {insight_id} not found")
+    return insight
+
+
+@router.post(
+    "/insights/{insight_id}/feedback",
+    response_model=InsightFeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_insight_feedback(
+    insight_id: uuid.UUID,
+    payload: InsightFeedbackCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Thumbs up/down + optional comment. Upserts — a second call from the same
+    user updates their existing vote rather than creating a duplicate."""
+    insight = _get_insight_or_404(db, insight_id)
+    return insight_feedback_service.submit_feedback(
+        db,
+        insight=insight,
+        user=current_user,
+        rating=payload.rating,
+        comment=payload.comment,
+    )
+
+
+@router.get("/insights/{insight_id}/feedback", response_model=InsightFeedbackSummary)
+def get_insight_feedback(
+    insight_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_insight_or_404(db, insight_id)
+    return insight_feedback_service.get_summary(db, insight_id=insight_id, user_id=current_user.id)
+
+
+@router.delete("/insights/{insight_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+def retract_insight_feedback(
+    insight_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _get_insight_or_404(db, insight_id)
+    removed = insight_feedback_service.retract_feedback(
+        db, insight_id=insight_id, user=current_user
+    )
+    if not removed:
+        raise HTTPException(status_code=404, detail="No feedback to retract")
+
+
+@router.get("/insights/guidance", response_model=InsightGuidanceResponse | None)
+def get_current_guidance(
+    _: User = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
+    """Current prompt guidance the Insight Agent is following, derived from
+    accumulated user feedback. Manager+ only — visibility into what's steering
+    the agent's narration."""
+    from app.crud import insight_guidance as guidance_crud
+
+    return guidance_crud.get_active(db)
+
+
+@router.post(
+    "/insights/guidance/generate",
+    response_model=InsightGuidanceResponse | None,
+    status_code=status.HTTP_201_CREATED,
+)
+async def trigger_guidance_generation(
+    _: User = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
+    """Force a guidance regeneration cycle now instead of waiting for the
+    weekly cron. Returns null if there wasn't enough new feedback to update it."""
+    return await insight_guidance_service.generate_guidance(db)

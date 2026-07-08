@@ -12,6 +12,7 @@ from app.models.dataset import Dataset
 from app.models.insight import InsightEvent
 from app.models.kpi import KPIDefinition, KPISnapshot
 from app.schemas.insight import InsightEventResponse
+from app.services import insight_feedback_service, insight_guidance_service
 from app.services.insight_math_service import analyze
 
 logger = logging.getLogger(__name__)
@@ -91,8 +92,10 @@ async def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
         is_anomaly=result.is_anomaly,
     )
 
-    # GenAI narration (best-effort).
+    # GenAI narration (best-effort). Includes the latest feedback-derived
+    # guidance, if any, so the agent's writing improves over time.
     kpi: KPIDefinition | None = get_kpi(db, kpi_id)
+    guidance_text = insight_guidance_service.get_active_guidance_text(db)
     narrative = await narrate(
         {
             "kpi_id": kpi_id,
@@ -108,6 +111,7 @@ async def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
             "trend_slope": result.trend_slope,
             "insight_type": result.insight_type,
             "recent_values": values[-7:],
+            "guidance": guidance_text,
         }
     )
     if narrative is not None:
@@ -116,6 +120,12 @@ async def detect_for_kpi(db: Session, kpi_id: uuid.UUID) -> InsightEvent | None:
         event.llm_severity = narrative.severity
         event.llm_summary = narrative.summary
         event.narrated_at = datetime.now(UTC)
+
+    # Short-term suppression heuristic — never blocks persistence; the event is
+    # still created and published, just flagged for the frontend to badge.
+    is_suppressed, suppression_score = insight_feedback_service.compute_suppression(db, event)
+    event.is_suppressed = is_suppressed
+    event.suppression_score = suppression_score
 
     db.add(event)
     db.commit()
