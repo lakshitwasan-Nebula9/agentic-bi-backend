@@ -24,6 +24,14 @@ class Settings(BaseSettings):
 
     CONNECTOR_ENCRYPTION_KEY: str = "nXVAMA1WlKWTqw6YCIpBHXGt09CZhrJyUHssyc68ebU="
 
+    # Rate limiting — Redis fixed-window counters (see app/core/rate_limit.py).
+    # Limits use the form "N/second|minute|hour". Auth is keyed by client IP
+    # (unauthenticated brute-force target); the rest by user id with IP fallback.
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/minute"
+    RATE_LIMIT_LLM: str = "20/minute"
+    RATE_LIMIT_DEFAULT: str = "300/minute"
+
     DATA_QUALITY_THRESHOLD: float = 60.0
 
     GEMINI_API_KEY: str | None = None

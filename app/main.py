@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.rate_limit import RateLimitMiddleware
 from app.routers import (
     approvals,
     audit_logs,
@@ -50,12 +51,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RateLimitMiddleware)
+
+# Added after RateLimitMiddleware so CORS runs first (outermost) and 429
+# responses still carry CORS + exposed Retry-After headers for the browser.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
