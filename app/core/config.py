@@ -10,12 +10,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/agentic_bi"
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # SQLAlchemy connection pool sizing (see app/core/database.py). Defaults raise the
-    # library defaults (5 + 10) for production concurrency across API + agent workers.
-    # pool_pre_ping + pool_recycle stay on for Supabase/pgbouncer connection reuse.
-    DB_POOL_SIZE: int = 10
-    DB_MAX_OVERFLOW: int = 20
-    DB_POOL_TIMEOUT: int = 30
+    # SQLAlchemy connection pool sizing (see app/core/database.py). Defaults stay low
+    # because Supabase's session-mode pooler caps ALL clients combined at 15 connections;
+    # this app's ceiling (pool_size + max_overflow) must leave room for other devs, CI,
+    # and migrations. Override via env for a dedicated/production pooler with more headroom.
+    DB_POOL_SIZE: int = 3
+    DB_MAX_OVERFLOW: int = 2
+    DB_POOL_TIMEOUT: int = 10
 
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
