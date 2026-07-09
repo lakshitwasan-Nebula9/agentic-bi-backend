@@ -108,6 +108,11 @@ class DashboardResponse(BaseModel):
     # Caller's effective access ("read" | "write"), attached by the service so
     # the frontend knows whether to show edit controls / the permissions panel.
     my_access: DashboardAccessLevel | None = None
+    # Listing metadata attached by the service (not stored columns): how many
+    # widgets / distinct KPIs the dashboard has, and its owner's display name.
+    widget_count: int = 0
+    kpi_count: int = 0
+    owner_name: str | None = None
 
     class Config:
         from_attributes = True
@@ -115,6 +120,10 @@ class DashboardResponse(BaseModel):
 
 class DashboardDetailResponse(DashboardResponse):
     widgets: list[WidgetResponse] = []
+
+
+class DashboardPinRequest(BaseModel):
+    is_default: bool
 
 
 class DashboardPermissionUpsert(BaseModel):
