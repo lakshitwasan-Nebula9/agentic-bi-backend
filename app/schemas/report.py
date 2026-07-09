@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 # ---------------------------------------------------------------------------
 # Nested report structure — matches the JSON stored in reports.report_json
@@ -126,6 +126,18 @@ class ReportData(BaseModel):
 class ReportGenerateRequest(BaseModel):
     title: str | None = None
     period_label: str | None = None
+    # Optional scope. At most one may be set:
+    #   dashboard_id -> report covers only that dashboard's KPIs
+    #   connector_id -> report consolidates all certified KPIs of that database
+    # Neither set -> global report (all certified KPIs), the historical behavior.
+    dashboard_id: uuid.UUID | None = None
+    connector_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _one_scope_at_most(self) -> "ReportGenerateRequest":
+        if self.dashboard_id is not None and self.connector_id is not None:
+            raise ValueError("Provide at most one of dashboard_id or connector_id, not both.")
+        return self
 
 
 class ReportResponse(BaseModel):
@@ -135,6 +147,9 @@ class ReportResponse(BaseModel):
     title: str
     period_label: str | None
     status: str
+    scope: str
+    dashboard_id: uuid.UUID | None
+    connector_id: uuid.UUID | None
     executive_narrative: str | None
     generated_by: uuid.UUID | None
     created_at: datetime

@@ -461,15 +461,42 @@ async def generate_report(
     report_id: uuid.UUID,
     title: str,
     period_label: str,
+    *,
+    scope: str = "global",
+    dashboard_id: uuid.UUID | None = None,
+    connector_id: uuid.UUID | None = None,
 ) -> Report:
-    """Assemble, narrate, and persist the full report. Always returns a Report row."""
+    """Assemble, narrate, and persist the full report. Always returns a Report row.
+
+    ``scope`` selects which certified KPIs the report covers:
+      - ``global``    (default): every certified KPI and every dataset.
+      - ``dashboard`` : only the KPIs referenced by ``dashboard_id``'s widgets.
+      - ``database``  : all certified KPIs reachable from ``connector_id``'s datasets.
+    Insights, scorecard, time-intelligence, decision-actions, and the appendix all
+    key off the resulting KPI set, so they narrow automatically.
+    """
     report = report_crud.get_report(db, report_id)
     if report is None:
         raise ValueError(f"Report {report_id} not found")
 
     try:
-        # 1. Fetch certified KPIs
-        certified_kpis: list[KPIDefinition] = kpi_crud.list_kpis(db, status="certified")
+        from app.crud.dataset import list_datasets
+
+        # 1. Fetch the certified KPIs in scope
+        if scope == "dashboard" and dashboard_id is not None:
+            from app.services.report_scope import kpi_ids_for_dashboard
+
+            wanted = kpi_ids_for_dashboard(db, dashboard_id)
+            certified_kpis: list[KPIDefinition] = [
+                k for k in kpi_crud.list_kpis(db, status="certified") if k.id in wanted
+            ]
+        elif scope == "database" and connector_id is not None:
+            from app.services.report_scope import certified_kpis_for_connector
+
+            certified_kpis = certified_kpis_for_connector(db, connector_id)
+        else:
+            certified_kpis = kpi_crud.list_kpis(db, status="certified")
+
         kpi_map: dict[uuid.UUID, KPIDefinition] = {k.id: k for k in certified_kpis}
 
         # 2. Fetch snapshots for each KPI
@@ -481,13 +508,16 @@ async def generate_report(
         from app.services.insight_service import list_insights
 
         all_events: list[InsightEvent] = list_insights(db, limit=200)
-        # Keep only events for certified KPIs
+        # Keep only events for in-scope certified KPIs
         events = [e for e in all_events if e.kpi_id in kpi_map]
 
-        # 4. Fetch datasets for appendix
-        from app.crud.dataset import list_datasets
-
-        datasets: list[Dataset] = list_datasets(db)
+        # 4. Fetch datasets for the appendix, scoped to the KPIs in the report
+        all_datasets: list[Dataset] = list_datasets(db)
+        if scope == "global":
+            datasets: list[Dataset] = all_datasets
+        else:
+            scoped_dataset_ids = {k.dataset_id for k in certified_kpis}
+            datasets = [ds for ds in all_datasets if ds.id in scoped_dataset_ids]
 
         # Build connector type lookup
         from app.crud.connector import get_connector
