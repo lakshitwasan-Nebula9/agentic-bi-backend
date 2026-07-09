@@ -158,12 +158,28 @@ def test_non_owner_viewer_can_duplicate(seeded_dashboard):
     assert copy.owner_id != ids["owner"].id
 
 
-def test_non_owner_viewer_can_pin(seeded_dashboard):
+def test_pin_is_per_user(seeded_dashboard):
+    from app.core.database import SessionLocal
     from app.services import dashboard_service
 
     db, ids = seeded_dashboard
-    # A viewer with only read access (not the owner) can still pin/unpin.
+
+    def is_pinned_for(user) -> bool:
+        # Fresh session per call — mirrors a real per-request session, so the
+        # per-viewer is_pinned attribute isn't clobbered across viewers via the
+        # shared identity map.
+        with SessionLocal() as s:
+            rows = dashboard_service.list_dashboards(s, user)
+            return next(d.is_pinned for d in rows if d.id == ids["dashboard_id"])
+
+    # A viewer with only read access (not the owner) can pin for themselves.
     pinned = dashboard_service.set_pinned(db, ids["dashboard_id"], ids["viewer"], True)
-    assert pinned.is_default is True
-    unpinned = dashboard_service.set_pinned(db, ids["dashboard_id"], ids["viewer"], False)
-    assert unpinned.is_default is False
+    assert pinned.is_pinned is True
+
+    # The viewer sees it pinned; the owner does NOT (pin is per-user, not global).
+    assert is_pinned_for(ids["viewer"]) is True
+    assert is_pinned_for(ids["owner"]) is False
+
+    # Unpin removes it for the viewer.
+    dashboard_service.set_pinned(db, ids["dashboard_id"], ids["viewer"], False)
+    assert is_pinned_for(ids["viewer"]) is False

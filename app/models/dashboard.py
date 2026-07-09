@@ -91,3 +91,29 @@ class DashboardPermission(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class DashboardPin(Base):
+    """A user's personal pin of a dashboard to the top of their listing.
+
+    Per-user (unlike the deprecated global ``dashboards.is_default``): pinning is a
+    private preference, so one user's pin never affects another user's Pinned section.
+    """
+
+    __tablename__ = "dashboard_pins"
+    __table_args__ = (UniqueConstraint("user_id", "dashboard_id", name="uq_dashboard_pin"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dashboard_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("dashboards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

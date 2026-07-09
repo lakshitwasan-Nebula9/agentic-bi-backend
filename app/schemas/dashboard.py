@@ -113,6 +113,9 @@ class DashboardResponse(BaseModel):
     widget_count: int = 0
     kpi_count: int = 0
     owner_name: str | None = None
+    # Whether the *current viewer* has pinned this dashboard (per-user, from
+    # dashboard_pins) — distinct from the deprecated global is_default column.
+    is_pinned: bool = False
 
     class Config:
         from_attributes = True
@@ -123,7 +126,7 @@ class DashboardDetailResponse(DashboardResponse):
 
 
 class DashboardPinRequest(BaseModel):
-    is_default: bool
+    pinned: bool
 
 
 class DashboardPermissionUpsert(BaseModel):

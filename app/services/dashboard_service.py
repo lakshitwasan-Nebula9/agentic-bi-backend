@@ -185,6 +185,7 @@ def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
         for g in db.query(DashboardPermission).filter(DashboardPermission.user_id == viewer.id)
     }
     widget_counts, kpi_counts, owner_names = _listing_metadata(db, dashboards)
+    pinned_ids = dashboard_crud.pinned_dashboard_ids(db, viewer.id)
     for dashboard in dashboards:
         if dashboard.owner_id == viewer.id:
             access = DashboardAccessLevel.WRITE
@@ -196,6 +197,7 @@ def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
         dashboard.widget_count = widget_counts.get(dashboard.id, 0)
         dashboard.kpi_count = kpi_counts.get(dashboard.id, 0)
         dashboard.owner_name = owner_names.get(dashboard.owner_id)
+        dashboard.is_pinned = dashboard.id in pinned_ids
     return dashboards
 
 
@@ -210,12 +212,15 @@ def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID)
         name=payload.name,
         description=payload.description,
         category=category,
-        is_default=payload.is_default,
         owner_id=owner_id,
     )
     dashboard = dashboard_crud.create_dashboard(db, dashboard)
     if payload.connector_id is not None:
         _preconfigure_widgets(db, dashboard, payload.connector_id)
+    # "Pin to top" on create is now a personal pin for the creator (per-user).
+    if payload.is_default:
+        dashboard_crud.add_pin(db, owner_id, dashboard.id)
+    dashboard.is_pinned = bool(payload.is_default)
     return _with_access(dashboard, DashboardAccessLevel.WRITE)
 
 
@@ -479,14 +484,19 @@ def update_dashboard(
     )
 
 
-def set_pinned(db: Session, dashboard_id: uuid.UUID, viewer: User, is_default: bool) -> Dashboard:
-    """Pin/unpin a dashboard. Unlike other edits this only needs *view* access —
-    any user who can see a dashboard may pin it to the top of the listing."""
+def set_pinned(db: Session, dashboard_id: uuid.UUID, viewer: User, pinned: bool) -> Dashboard:
+    """Pin/unpin a dashboard for the current viewer only (per-user, not global).
+
+    Needs just *view* access — any user who can see a dashboard may pin it to the
+    top of their own listing; it never affects anyone else's Pinned section.
+    """
     dashboard = get_viewable_dashboard_or_404(db, dashboard_id, viewer)
-    return _with_access(
-        dashboard_crud.update_dashboard(db, dashboard, {"is_default": is_default}),
-        dashboard.my_access,
-    )
+    if pinned:
+        dashboard_crud.add_pin(db, viewer.id, dashboard_id)
+    else:
+        dashboard_crud.remove_pin(db, viewer.id, dashboard_id)
+    dashboard.is_pinned = pinned
+    return dashboard
 
 
 def delete_dashboard(db: Session, dashboard_id: uuid.UUID, owner_id: uuid.UUID) -> None:

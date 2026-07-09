@@ -171,8 +171,8 @@ def set_dashboard_pinned(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Pin/unpin a dashboard — allowed for anyone who can view it (not just editors)."""
-    return dashboard_service.set_pinned(db, dashboard_id, current_user, payload.is_default)
+    """Pin/unpin a dashboard for the current user — allowed for anyone who can view it."""
+    return dashboard_service.set_pinned(db, dashboard_id, current_user, payload.pinned)
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
