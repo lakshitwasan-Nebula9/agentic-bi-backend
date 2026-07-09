@@ -144,12 +144,48 @@ def get_writable_dashboard_or_404(db: Session, dashboard_id: uuid.UUID, actor: U
     return _with_access(dashboard, access)
 
 
+def _listing_metadata(
+    db: Session, dashboards: list[Dashboard]
+) -> tuple[dict[uuid.UUID, int], dict[uuid.UUID, int], dict[uuid.UUID, str | None]]:
+    """Per-dashboard widget count, distinct-KPI count, and owner display name.
+
+    Computed in a few grouped queries over the dashboard-id set (no N+1).
+    """
+    dash_ids = [d.id for d in dashboards]
+    if not dash_ids:
+        return {}, {}, {}
+
+    widget_counts = dict(
+        db.query(DashboardWidget.dashboard_id, func.count())
+        .filter(DashboardWidget.dashboard_id.in_(dash_ids))
+        .group_by(DashboardWidget.dashboard_id)
+        .all()
+    )
+    kpi_counts = dict(
+        db.query(
+            DashboardWidget.dashboard_id,
+            func.count(func.distinct(DashboardWidget.config["kpi_id"].astext)),
+        )
+        .filter(
+            DashboardWidget.dashboard_id.in_(dash_ids),
+            DashboardWidget.config["kpi_id"].astext.isnot(None),
+        )
+        .group_by(DashboardWidget.dashboard_id)
+        .all()
+    )
+    owner_ids = {d.owner_id for d in dashboards}
+    owner_names = dict(db.query(User.id, User.name).filter(User.id.in_(owner_ids)).all())
+    return widget_counts, kpi_counts, owner_names
+
+
 def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
     dashboards = dashboard_crud.list_viewable_dashboards(db, viewer.id, _lower_roles(viewer))
     grants = {
         g.dashboard_id: g.access_level
         for g in db.query(DashboardPermission).filter(DashboardPermission.user_id == viewer.id)
     }
+    widget_counts, kpi_counts, owner_names = _listing_metadata(db, dashboards)
+    pinned_ids = dashboard_crud.pinned_dashboard_ids(db, viewer.id)
     for dashboard in dashboards:
         if dashboard.owner_id == viewer.id:
             access = DashboardAccessLevel.WRITE
@@ -158,6 +194,10 @@ def list_dashboards(db: Session, viewer: User) -> list[Dashboard]:
         else:
             access = DashboardAccessLevel.READ
         _with_access(dashboard, access)
+        dashboard.widget_count = widget_counts.get(dashboard.id, 0)
+        dashboard.kpi_count = kpi_counts.get(dashboard.id, 0)
+        dashboard.owner_name = owner_names.get(dashboard.owner_id)
+        dashboard.is_pinned = dashboard.id in pinned_ids
     return dashboards
 
 
@@ -172,13 +212,73 @@ def create_dashboard(db: Session, payload: DashboardCreate, owner_id: uuid.UUID)
         name=payload.name,
         description=payload.description,
         category=category,
-        is_default=payload.is_default,
         owner_id=owner_id,
     )
     dashboard = dashboard_crud.create_dashboard(db, dashboard)
     if payload.connector_id is not None:
         _preconfigure_widgets(db, dashboard, payload.connector_id)
+    # "Pin to top" on create is now a personal pin for the creator (per-user).
+    if payload.is_default:
+        dashboard_crud.add_pin(db, owner_id, dashboard.id)
+    dashboard.is_pinned = bool(payload.is_default)
     return _with_access(dashboard, DashboardAccessLevel.WRITE)
+
+
+def duplicate_dashboard(db: Session, source_id: uuid.UUID, viewer: User) -> Dashboard:
+    """Copy a viewable dashboard (and all its widgets) into a new one the caller owns.
+
+    Any viewer may duplicate — the copy is private to the duplicator (its own owner,
+    not pinned, and without the source's share grants).
+    """
+    source = get_viewable_dashboard_or_404(db, source_id, viewer)
+
+    copy = dashboard_crud.create_dashboard(
+        db,
+        Dashboard(
+            name=f"Copy of {source.name}",
+            description=source.description,
+            category=source.category,
+            is_default=False,
+            owner_id=viewer.id,
+        ),
+    )
+
+    source_widgets = (
+        db.query(DashboardWidget).filter(DashboardWidget.dashboard_id == source_id).all()
+    )
+    if source_widgets:
+        dashboard_crud.create_widgets(
+            db,
+            [
+                DashboardWidget(
+                    dashboard_id=copy.id,
+                    widget_type=w.widget_type,
+                    title=w.title,
+                    config=w.config,
+                    x=w.x,
+                    y=w.y,
+                    w=w.w,
+                    h=w.h,
+                )
+                for w in source_widgets
+            ],
+        )
+
+    return _with_access(copy, DashboardAccessLevel.WRITE)
+
+
+def kpis_for_dashboard(db: Session, dashboard_id: uuid.UUID, viewer: User) -> list[KPIResponse]:
+    """The certified/live KPIs referenced by a viewable dashboard's widgets."""
+    get_viewable_dashboard_or_404(db, dashboard_id, viewer)
+    kpi_ids = _widget_kpi_ids(db, dashboard_id)
+    if not kpi_ids:
+        return []
+    kpis = (
+        db.query(KPIDefinition)
+        .filter(KPIDefinition.id.in_(kpi_ids), KPIDefinition.is_deleted.is_(False))
+        .all()
+    )
+    return kpi_service._enrich(db, kpis)
 
 
 def _widget_kpi_ids(db: Session, dashboard_id: uuid.UUID) -> list[uuid.UUID]:
@@ -382,6 +482,21 @@ def update_dashboard(
     return _with_access(
         dashboard_crud.update_dashboard(db, dashboard, updates), dashboard.my_access
     )
+
+
+def set_pinned(db: Session, dashboard_id: uuid.UUID, viewer: User, pinned: bool) -> Dashboard:
+    """Pin/unpin a dashboard for the current viewer only (per-user, not global).
+
+    Needs just *view* access — any user who can see a dashboard may pin it to the
+    top of their own listing; it never affects anyone else's Pinned section.
+    """
+    dashboard = get_viewable_dashboard_or_404(db, dashboard_id, viewer)
+    if pinned:
+        dashboard_crud.add_pin(db, viewer.id, dashboard_id)
+    else:
+        dashboard_crud.remove_pin(db, viewer.id, dashboard_id)
+    dashboard.is_pinned = pinned
+    return dashboard
 
 
 def delete_dashboard(db: Session, dashboard_id: uuid.UUID, owner_id: uuid.UUID) -> None:

@@ -18,6 +18,7 @@ from app.schemas.dashboard import (
     DashboardDetailResponse,
     DashboardPermissionResponse,
     DashboardPermissionUpsert,
+    DashboardPinRequest,
     DashboardResponse,
     DashboardUpdate,
     WidgetCreate,
@@ -25,6 +26,7 @@ from app.schemas.dashboard import (
     WidgetResponse,
     WidgetUpdate,
 )
+from app.schemas.kpi import KPIResponse
 from app.services import dashboard_service, insight_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
@@ -128,6 +130,30 @@ def get_dashboard(
     return dashboard_service.get_viewable_dashboard_or_404(db, dashboard_id, current_user)
 
 
+@router.get("/{dashboard_id}/kpis", response_model=list[KPIResponse])
+def list_dashboard_kpis(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The KPIs referenced by a dashboard's widgets (for the card's View KPIs modal)."""
+    return dashboard_service.kpis_for_dashboard(db, dashboard_id, current_user)
+
+
+@router.post(
+    "/{dashboard_id}/duplicate",
+    response_model=DashboardResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_dashboard(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Duplicate a viewable dashboard (and its widgets) into a copy owned by the caller."""
+    return dashboard_service.duplicate_dashboard(db, dashboard_id, current_user)
+
+
 @router.patch("/{dashboard_id}", response_model=DashboardResponse)
 def update_dashboard(
     dashboard_id: uuid.UUID,
@@ -136,6 +162,17 @@ def update_dashboard(
     current_user: User = Depends(get_current_user),
 ):
     return dashboard_service.update_dashboard(db, dashboard_id, payload, actor=current_user)
+
+
+@router.patch("/{dashboard_id}/pin", response_model=DashboardResponse)
+def set_dashboard_pinned(
+    dashboard_id: uuid.UUID,
+    payload: DashboardPinRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pin/unpin a dashboard for the current user — allowed for anyone who can view it."""
+    return dashboard_service.set_pinned(db, dashboard_id, current_user, payload.pinned)
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)

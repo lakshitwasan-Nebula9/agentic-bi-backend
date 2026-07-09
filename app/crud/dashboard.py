@@ -3,7 +3,12 @@ import uuid
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.dashboard import Dashboard, DashboardPermission, DashboardWidget
+from app.models.dashboard import (
+    Dashboard,
+    DashboardPermission,
+    DashboardPin,
+    DashboardWidget,
+)
 from app.models.user import User, UserRole
 
 
@@ -62,6 +67,32 @@ def update_dashboard(db: Session, dashboard: Dashboard, updates: dict) -> Dashbo
 
 def delete_dashboard(db: Session, dashboard: Dashboard) -> None:
     db.delete(dashboard)
+    db.commit()
+
+
+def pinned_dashboard_ids(db: Session, user_id: uuid.UUID) -> set[uuid.UUID]:
+    """Ids of the dashboards this user has personally pinned."""
+    rows = db.query(DashboardPin.dashboard_id).filter(DashboardPin.user_id == user_id).all()
+    return {r[0] for r in rows}
+
+
+def add_pin(db: Session, user_id: uuid.UUID, dashboard_id: uuid.UUID) -> None:
+    """Pin a dashboard for a user (idempotent — a duplicate pin is a no-op)."""
+    exists = (
+        db.query(DashboardPin.id)
+        .filter(DashboardPin.user_id == user_id, DashboardPin.dashboard_id == dashboard_id)
+        .first()
+    )
+    if exists:
+        return
+    db.add(DashboardPin(user_id=user_id, dashboard_id=dashboard_id))
+    db.commit()
+
+
+def remove_pin(db: Session, user_id: uuid.UUID, dashboard_id: uuid.UUID) -> None:
+    db.query(DashboardPin).filter(
+        DashboardPin.user_id == user_id, DashboardPin.dashboard_id == dashboard_id
+    ).delete()
     db.commit()
 
 
