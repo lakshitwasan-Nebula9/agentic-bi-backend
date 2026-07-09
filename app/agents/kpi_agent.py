@@ -94,12 +94,13 @@ async def _ensure_schema_metadata(db: Session, dataset, lookup_name: str):
     logger.info("schema_metadata missing for '%s' — running schema detection inline", lookup_name)
     request = SchemaDetectRequest(
         table_name=lookup_name,
+        dataset_id=dataset.id,
         columns=[
             ColumnInput(name=name, type=str(col_type)) for name, col_type in fingerprint.items()
         ],
     )
     await detect(db, request)
-    return get_schema_metadata_by_table(db, lookup_name)
+    return get_schema_metadata_by_table(db, lookup_name, dataset_id=dataset.id)
 
 
 async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[uuid.UUID]:
@@ -118,7 +119,7 @@ async def generate_kpis_for_dataset(db: Session, dataset_id: uuid.UUID) -> list[
     table_name_match = re.search(r"\bFROM\s+([^\s;,)]+)", dataset.source_query, re.IGNORECASE)
     lookup_name = table_name_match.group(1) if table_name_match else dataset.name
 
-    schema_meta = get_schema_metadata_by_table(db, lookup_name)
+    schema_meta = get_schema_metadata_by_table(db, lookup_name, dataset_id=dataset_id)
     if schema_meta is None:
         # Auto-generation can fire (on first sync) before the frontend's separate
         # /schema/detect call has populated schema_metadata. Run detection inline so

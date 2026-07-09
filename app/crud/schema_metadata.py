@@ -42,7 +42,10 @@ def upsert_schema_metadata(
     stmt = (
         insert(SchemaMetadata)
         .values(id=uuid.uuid4(), dataset_id=dataset_id, **values)
-        .on_conflict_do_update(index_elements=[SchemaMetadata.table_name], set_=update_cols)
+        .on_conflict_do_update(
+            index_elements=[SchemaMetadata.dataset_id, SchemaMetadata.table_name],
+            set_=update_cols,
+        )
         .returning(SchemaMetadata.id)
     )
 
@@ -52,9 +55,23 @@ def upsert_schema_metadata(
 
 
 def get_schema_metadata_by_table(
-    db: Session, table_name: str, include_deleted: bool = False
+    db: Session,
+    table_name: str,
+    dataset_id: uuid.UUID | None = None,
+    include_deleted: bool = False,
 ) -> SchemaMetadata | None:
+    """Look up schema metadata for a table, scoped to a dataset when given.
+
+    Two datasets can share a table name (e.g. two connectors pointed at the same source
+    DB), so an unscoped lookup is ambiguous. When ``dataset_id`` is provided, only a row
+    scoped to that exact dataset is returned — no fallback to unscoped/other-dataset rows,
+    since those may belong to a different source and would silently feed wrong schema data
+    into KPI generation. Callers should auto-detect (see kpi_agent._ensure_schema_metadata)
+    when this returns None for a known dataset.
+    """
     q = db.query(SchemaMetadata).filter(SchemaMetadata.table_name == table_name)
     if not include_deleted:
         q = q.filter(SchemaMetadata.is_deleted.is_(False))
-    return q.first()
+    if dataset_id is None:
+        return q.filter(SchemaMetadata.dataset_id.is_(None)).first()
+    return q.filter(SchemaMetadata.dataset_id == dataset_id).first()

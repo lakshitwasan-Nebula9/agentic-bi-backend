@@ -162,7 +162,7 @@ def derive_snapshot_period(
 
     Returns (None, None) when no date columns exist or the column cannot be cast to a timestamp.
     """
-    schema_meta = get_schema_metadata_by_table(db, table_name)
+    schema_meta = get_schema_metadata_by_table(db, table_name, dataset_id=dataset_id)
     if not schema_meta or not schema_meta.date_columns:
         return None, None
 
@@ -212,7 +212,7 @@ def compute_monthly_snapshots(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    schema_meta = get_schema_metadata_by_table(db, kpi.table_name)
+    schema_meta = get_schema_metadata_by_table(db, kpi.table_name, dataset_id=kpi.dataset_id)
     column_names: list[str] = []
     if schema_meta and schema_meta.columns:
         column_names = [col["name"] for col in schema_meta.columns if isinstance(col, dict)]
@@ -321,7 +321,7 @@ def snapshot_kpi(db: Session, kpi: KPIDefinition) -> list[KPISnapshot]:
     Returns a list so callers handle both paths uniformly.
     Full-dataset fallback returns a one-element list.
     """
-    schema_meta = get_schema_metadata_by_table(db, kpi.table_name)
+    schema_meta = get_schema_metadata_by_table(db, kpi.table_name, dataset_id=kpi.dataset_id)
     date_cols = schema_meta.date_columns if schema_meta else None
 
     # Schema detection sometimes returns no date columns; infer one from the
@@ -356,7 +356,7 @@ def compute_and_snapshot(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    schema_meta = get_schema_metadata_by_table(db, kpi.table_name)
+    schema_meta = get_schema_metadata_by_table(db, kpi.table_name, dataset_id=kpi.dataset_id)
     column_names: list[str] = []
     if schema_meta and schema_meta.columns:
         column_names = [col["name"] for col in schema_meta.columns if isinstance(col, dict)]
